@@ -1,0 +1,27 @@
+spring:
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+logging:
+  level:
+    root: WARN
+    com.ilja.smarthome.energycontrol: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+
+# Production actuator endpoints - restricted
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+
+# Production server configuration
+server:
+  error:
+    include-stacktrace: never
+  compression:
+    enabled: true

@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: energy-control-api
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: energy_control
+      DB_USERNAME: energy_user
+      DB_PASSWORD: energy_pass
+      SERVER_PORT: 8080
+    ports:
+      - "8080:8080"
+    networks:
+      - energy-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ../logs:/app/logs
+
+networks:
+  energy-network:
+    external: true
