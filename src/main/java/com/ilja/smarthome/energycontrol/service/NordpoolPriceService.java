@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -40,7 +41,12 @@ public class NordpoolPriceService {
         log.info("Fetching Nordpool prices from Elering API");
 
         try {
-            EleringPriceResponse response = eleringClient.fetchNordpoolPrices();
+            LocalDate today = LocalDate.now(EUROPE_TALLINN);
+            ZonedDateTime start = today.atStartOfDay(EUROPE_TALLINN);
+            ZonedDateTime end = start.plusDays(2);
+
+            log.debug("Fetching prices for next day: {} to {}", start, end);
+            EleringPriceResponse response = eleringClient.fetchNordpoolPrices(start, end);
 
             List<EleringPriceResponse.PriceEntry> eeData = response.getData().get(ESTONIA_REGION);
             if (eeData == null || eeData.isEmpty()) {

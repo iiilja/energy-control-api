@@ -7,7 +7,7 @@
 INSERT INTO users (username, password_hash, email, enabled, account_non_expired, account_non_locked, credentials_non_expired, created_at, updated_at)
 VALUES (
     'admin',
-    '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5iuoJ5ZvCGKYi',  -- password: "admin"
+    '$2a$12$8do/vPU.So6vfmmVYOwTmOyVfivHsjVv/j5zzBqqJjK51luBrS1ZK',  -- password: "admin"
     'admin@energy-control.local',
     true,
     true,

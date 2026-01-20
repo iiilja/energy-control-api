@@ -50,7 +50,7 @@ A Spring Boot application for collecting, storing, and exposing heat pump data f
 
 ## Quick Start
 
-> 📘 **For comprehensive Docker documentation**, see [DOCKER.md](DOCKER.md)
+> 📘 **For comprehensive Docker documentation**, see [DOCKER.md](docker/DOCKER.md)
 
 ### Prerequisites
 

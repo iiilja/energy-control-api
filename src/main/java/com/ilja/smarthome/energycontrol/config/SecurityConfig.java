@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -46,6 +47,13 @@ public class SecurityConfig {
                 // Public endpoints
                 .requestMatchers("/actuator/health").permitAll()
 
+                // Swagger UI endpoints
+                .requestMatchers(
+                        "/swagger-ui/**",
+                        "/v3/api-docs/**",
+                        "/swagger-ui.html"
+                ).permitAll()
+
                 // Admin-only endpoints
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
 
@@ -54,7 +62,7 @@ public class SecurityConfig {
             )
             .httpBasic(withDefaults())
             .formLogin(withDefaults())
-            .csrf(csrf -> csrf.disable()); // Disabled for REST API
+            .csrf(AbstractHttpConfigurer::disable); // Disabled for REST API
 
         return http.build();
     }

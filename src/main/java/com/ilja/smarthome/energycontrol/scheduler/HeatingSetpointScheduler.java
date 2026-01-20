@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 
 @Component
@@ -48,7 +49,7 @@ public class HeatingSetpointScheduler {
 
         try {
             log.info("Starting scheduled heating setpoint adjustment");
-            ZonedDateTime now = ZonedDateTime.now();
+            ZonedDateTime now = ZonedDateTime.now().truncatedTo(ChronoUnit.HOURS);
 
             Optional<HeatingSetpointSchedule> scheduleOpt = scheduleRepository.findNextPendingSchedule(now);
 
@@ -66,7 +67,7 @@ public class HeatingSetpointScheduler {
                 scheduleRepository.save(schedule);
 
                 log.info("Successfully applied scheduled heating setpoint: {} -> {}°C (price: {} EUR/MWh)",
-                        getDefaultSetpoint(), targetSetpoint, schedule.getNordpoolPrice().getPrice());
+                            getDefaultSetpoint(), targetSetpoint, schedule.getNordpoolPrice().getPrice());
 
             } catch (ESP32CommunicationException e) {
                 log.error("Failed to apply scheduled heating setpoint: {}", e.getMessage());

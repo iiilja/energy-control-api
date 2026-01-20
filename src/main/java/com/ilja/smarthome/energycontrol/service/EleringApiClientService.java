@@ -18,7 +18,7 @@ public class EleringApiClientService {
 
     private static final String ELERING_BASE_URL = "https://dashboard.elering.ee";
     private static final String PRICE_ENDPOINT = "/api/nps/price";
-    private static final DateTimeFormatter API_DATE_FORMAT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
+    private static final DateTimeFormatter API_DATE_FORMAT = DateTimeFormatter.ISO_INSTANT;
 
     private final RestClient restClient;
 
@@ -27,9 +27,6 @@ public class EleringApiClientService {
         this.restClient = restClient;
     }
 
-    public EleringPriceResponse fetchNordpoolPrices() {
-        return fetchNordpoolPrices(null, null);
-    }
 
     public EleringPriceResponse fetchNordpoolPrices(ZonedDateTime start, ZonedDateTime end) {
         String endpoint = ELERING_BASE_URL + PRICE_ENDPOINT;
@@ -41,16 +38,19 @@ public class EleringApiClientService {
             boolean hasParams = false;
 
             if (start != null) {
-                uriBuilder.append("?start=").append(start.format(API_DATE_FORMAT));
+                uriBuilder.append("?start=").append(API_DATE_FORMAT.format(start.toInstant()));
                 hasParams = true;
             }
 
             if (end != null) {
-                uriBuilder.append(hasParams ? "&" : "?").append("end=").append(end.format(API_DATE_FORMAT));
+                uriBuilder.append(hasParams ? "&" : "?").append("end=").append(API_DATE_FORMAT.format(end.toInstant()));
             }
 
+            String requestUri = uriBuilder.toString();
+            log.debug("Requesting Elering API: {}", requestUri);
+
             EleringPriceResponse response = restClient.get()
-                    .uri(uriBuilder.toString())
+                    .uri(requestUri)
                     .retrieve()
                     .body(EleringPriceResponse.class);
 
