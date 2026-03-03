@@ -28,8 +28,9 @@ services:
   # Spring Boot Application - Optional (use --profile app to run)
   app:
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile
+    image: energy-control-api
     container_name: energy-control-api
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILE:-dev}
