@@ -44,9 +44,6 @@ public class HeatPumpReading {
     @Embedded
     private HeatCurveData heatCurve;
 
-    @Embedded
-    private PumpData pump;
-
     // Raw JSON for flexibility and debugging
     @Type(JsonBinaryType.class)
     @Column(name = "raw_json", columnDefinition = "jsonb")

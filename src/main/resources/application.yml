@@ -57,6 +57,13 @@ sungrow:
   timeout-ms: ${SUNGROW_TIMEOUT_MS:5000}
   rated-power-kw: ${SUNGROW_RATED_POWER_KW:15}
 
+# Thermia heat pump (Modbus TCP)
+thermia:
+  host: ${THERMIA_HOST:192.168.8.126}
+  port: ${THERMIA_PORT:502}
+  slave-id: ${THERMIA_SLAVE_ID:1}
+  timeout-ms: ${THERMIA_TIMEOUT_MS:5000}
+
 # Collection scheduler configuration
 collection:
   interval:

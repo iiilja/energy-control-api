@@ -1,4 +1,4 @@
-package com.ilja.smarthome.energycontrol.controller;
+package com.ilja.smarthome.energycontrol.sungrow.controller;
 
 import com.ilja.smarthome.energycontrol.sungrow.dto.SungrowPowerLimitRequest;
 import com.ilja.smarthome.energycontrol.sungrow.dto.SungrowStatusResponse;

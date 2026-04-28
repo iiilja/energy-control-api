@@ -2,8 +2,9 @@ package com.ilja.smarthome.energycontrol.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ilja.smarthome.energycontrol.domain.model.*;
-import com.ilja.smarthome.energycontrol.dto.esp32.HeatPumpDataResponse;
-import com.ilja.smarthome.energycontrol.exception.ESP32CommunicationException;
+import com.ilja.smarthome.energycontrol.thermia.dto.HeatPumpDataResponse;
+import com.ilja.smarthome.energycontrol.thermia.exception.ThermiaCommException;
+import com.ilja.smarthome.energycontrol.thermia.service.ThermiaHeatPumpService;
 import com.ilja.smarthome.energycontrol.repository.HeatPumpReadingRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,26 +19,26 @@ import java.util.stream.Collectors;
 @Slf4j
 public class DataCollectionService {
 
-    private final ESP32ClientService esp32Client;
+    private final ThermiaHeatPumpService thermiaService;
     private final HeatPumpReadingRepository readingRepository;
     private final ObjectMapper objectMapper;
 
     @Autowired
     public DataCollectionService(
-            ESP32ClientService esp32Client,
+            ThermiaHeatPumpService thermiaService,
             HeatPumpReadingRepository readingRepository,
             ObjectMapper objectMapper) {
-        this.esp32Client = esp32Client;
+        this.thermiaService = thermiaService;
         this.readingRepository = readingRepository;
         this.objectMapper = objectMapper;
     }
 
     @Transactional
     public HeatPumpReading collectAndStoreData() {
-        log.debug("Starting data collection from ESP32");
+        log.debug("Starting data collection from Thermia heat pump");
 
         try {
-            HeatPumpDataResponse response = esp32Client.fetchHeatPumpData();
+            HeatPumpDataResponse response = thermiaService.getHeatPumpData();
 
             HeatPumpReading reading = mapResponseToReading(response);
             reading.setCollectionTimestamp(LocalDateTime.now());
@@ -53,8 +54,8 @@ public class DataCollectionService {
             log.info("Successfully collected and stored reading with ID: {}", saved.getId());
             return saved;
 
-        } catch (ESP32CommunicationException e) {
-            log.error("Failed to communicate with ESP32: {}", e.getMessage());
+        } catch (ThermiaCommException e) {
+            log.error("Failed to communicate with Thermia heat pump: {}", e.getMessage());
             throw e;
         } catch (Exception e) {
             log.error("Unexpected error during data collection", e);
@@ -70,7 +71,6 @@ public class DataCollectionService {
         reading.setCompressor(mapCompressorData(response.getCompressor()));
         reading.setHeating(mapHeatingData(response.getHeating()));
         reading.setHeatCurve(mapHeatCurveData(response.getHeatCurve()));
-        reading.setPump(mapPumpData(response.getPump()));
 
         return reading;
     }
@@ -148,21 +148,6 @@ public class DataCollectionService {
         }
 
         return heatCurve;
-    }
-
-    private PumpData mapPumpData(HeatPumpDataResponse.PumpDto dto) {
-        if (dto == null) return null;
-
-        PumpData pump = new PumpData();
-        pump.setAutoMode(dto.getAutoMode());
-        pump.setCurrentState(dto.getCurrentState());
-        pump.setManualState(dto.getManualState());
-        pump.setOnDuration(dto.getOnDuration());
-        pump.setOffDuration(dto.getOffDuration());
-        pump.setLastStateChange(dto.getLastStateChange());
-        pump.setRemainingMinutes(dto.getRemainingMinutes());
-
-        return pump;
     }
 
     private BigDecimal toBigDecimal(Double value) {
