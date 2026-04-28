@@ -49,6 +49,14 @@ spring:
       enabled: true
 
 
+# Sungrow SG15RT inverter (Modbus TCP)
+sungrow:
+  host: ${SUNGROW_HOST:192.168.8.110}
+  port: ${SUNGROW_PORT:502}
+  slave-id: ${SUNGROW_SLAVE_ID:1}
+  timeout-ms: ${SUNGROW_TIMEOUT_MS:5000}
+  rated-power-kw: ${SUNGROW_RATED_POWER_KW:15}
+
 # Collection scheduler configuration
 collection:
   interval:

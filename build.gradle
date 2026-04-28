@@ -54,6 +54,9 @@ dependencies {
     annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
     annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
 
+    // Modbus TCP (Sungrow inverter)
+    implementation 'com.ghgande:j2mod:3.2.1'
+
     // Development tools
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
 

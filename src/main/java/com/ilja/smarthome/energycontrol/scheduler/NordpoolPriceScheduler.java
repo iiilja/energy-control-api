@@ -32,7 +32,7 @@ public class NordpoolPriceScheduler {
         this.configService = configService;
     }
 
-    @Scheduled(cron = "${nordpool.fetch.cron:0 22 00 * * *}")
+    @Scheduled(cron = "${nordpool.fetch.cron:0 00 20 * * *}")
     public void fetchDailyPrices() {
         boolean enabled = Boolean.parseBoolean(
                 configService.getConfigValue("nordpool.fetch.enabled", "true")
