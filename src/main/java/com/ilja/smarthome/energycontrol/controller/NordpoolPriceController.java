@@ -1,17 +1,19 @@
 package com.ilja.smarthome.energycontrol.controller;
 
+import com.ilja.smarthome.energycontrol.dto.nordpool.NordpoolPriceDto;
 import com.ilja.smarthome.energycontrol.service.NordpoolPriceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -26,6 +28,18 @@ public class NordpoolPriceController {
     @Autowired
     public NordpoolPriceController(NordpoolPriceService nordpoolPriceService) {
         this.nordpoolPriceService = nordpoolPriceService;
+    }
+
+    @GetMapping("/prices")
+    @Operation(summary = "Get Nordpool prices for a date",
+               description = "Returns stored Nordpool prices for the given date (defaults to today, Europe/Tallinn timezone)")
+    public ResponseEntity<List<NordpoolPriceDto>> getPrices(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        List<NordpoolPriceDto> result = nordpoolPriceService.getPricesForDate(date)
+                .stream()
+                .map(p -> new NordpoolPriceDto(p.getPriceTimestamp().toOffsetDateTime().toString(), p.getPrice()))
+                .toList();
+        return ResponseEntity.ok(result);
     }
 
     @PostMapping("/fetch")

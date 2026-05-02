@@ -62,15 +62,4 @@ public class DataCollectionScheduler {
             // Don't rethrow - let scheduler continue on next iteration
         }
     }
-
-    /**
-     * Manually trigger data collection.
-     * Can be called from admin endpoints for testing or immediate collection.
-     *
-     * @return The collected reading
-     */
-    public HeatPumpReading triggerManualCollection() {
-        log.info("Manual data collection triggered");
-        return dataCollectionService.collectAndStoreData();
-    }
 }

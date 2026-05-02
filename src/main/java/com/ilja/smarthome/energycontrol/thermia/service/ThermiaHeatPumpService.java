@@ -58,22 +58,29 @@ public class ThermiaHeatPumpService {
     private static final int REG_IN_TEMP_BATCH_COUNT   = 12;
     private static final int REG_IN_STATUS_BATCH_START = 1;   // batch 1–27 for full status pass 1
     private static final int REG_IN_STATUS_BATCH_COUNT = 27;
-    private static final int REG_IN_HOURS_BATCH_START  = 49;  // batch 49–55 for hours + speed
-    private static final int REG_IN_HOURS_BATCH_COUNT  = 7;
+    private static final int REG_IN_HOURS_BATCH_START       = 49;  // batch 49–68 for hours, speed, heater step
+    private static final int REG_IN_INTERNAL_HEATER_STEP    = 68;  // de-facto 30068
+    private static final int REG_IN_HOURS_BATCH_COUNT       = REG_IN_INTERNAL_HEATER_STEP - REG_IN_HOURS_BATCH_START + 1; // 20
 
     // Holding registers (FC03/FC06) — 1-based
     private static final int REG_OPERATION_MODE        = 1;
     private static final int REG_COMFORT_SETPOINT      = 6;
     private static final int REG_HEAT_CURVE_Y_START    = 7;
-    private static final int REG_DHW_START_TEMP        = 23;
-    private static final int REG_DHW_STOP_TEMP         = 24;
+    private static final int REG_TAP_WATER_START_TEMP        = 23;
+    private static final int REG_TAP_WATER_STOP_TEMP         = 24;
     private static final int REG_HOLDING_BATCH_START   = 1;   // batch 1–24 covers mode, setpoint, curve Y, DHW
     private static final int REG_HOLDING_BATCH_COUNT   = 24;
 
-    // Coils (FC01/FC05) — 0-based
-    private static final int COIL_DHW_ENABLED          = 8;
-    private static final int COIL_HEATING_ENABLED      = 9;
-    private static final int COIL_COOLING_ENABLED      = 10;
+    // Coils (FC01/FC05) — 0-based (de-facto = address + 1)
+    private static final int COIL_INTERNAL_HEATER      = 4;   // de-facto 5
+    private static final int COIL_TAP_WATER_ENABLED          = 8;   // de-facto 9
+    private static final int COIL_HEATING_ENABLED      = 9;   // de-facto 10
+    private static final int COIL_COOLING_ENABLED      = 10;  // de-facto 11
+    private static final int COIL_HOT_GAS_PUMP         = 14;  // de-facto 15
+    private static final int COIL_ANTI_LEGIONELLA      = 24;  // de-facto 25
+    // Single batch covers all coils above: read from COIL_INTERNAL_HEATER to COIL_ANTI_LEGIONELLA inclusive
+    private static final int COIL_BATCH_START          = COIL_INTERNAL_HEATER;
+    private static final int COIL_BATCH_COUNT          = COIL_ANTI_LEGIONELLA - COIL_BATCH_START + 1; // 21
 
     // Discrete inputs (FC02) — 0-based
     private static final int DISCRETE_ALARM_A          = 0;
@@ -109,7 +116,7 @@ public class ThermiaHeatPumpService {
 
         // Batch 4: alarm flags (FC02) and function enable states (FC01)
         boolean[] alarms = modbusClient.readDiscreteInputs(DISCRETE_ALARM_A, 3);
-        boolean[] coils  = modbusClient.readCoils(COIL_DHW_ENABLED, 3);
+        boolean[] coils  = modbusClient.readCoils(COIL_BATCH_START, COIL_BATCH_COUNT);
 
         // --- Extract values from input batch 1 (index = register - 1) ---
         int currentDemand  = inputLow[REG_IN_CURRENT_DEMAND - 1];
@@ -127,6 +134,7 @@ public class ThermiaHeatPumpService {
         long heatingHours       = to32bit(inputHigh[2], inputHigh[3]);
         long externalHeaterHours= to32bit(inputHigh[4], inputHigh[5]);
         double compressorSpeed  = inputHigh[6] / 100.0;
+        int internalHeaterStep  = inputHigh[REG_IN_INTERNAL_HEATER_STEP - REG_IN_HOURS_BATCH_START]; // reg 68
 
         // --- Extract values from holding batch (index = register - 1) ---
         int  operationMode    = holding[REG_OPERATION_MODE - 1];
@@ -156,9 +164,13 @@ public class ThermiaHeatPumpService {
                 heatingSetpoint,
                 heatCurveX,
                 heatCurveY,
-                coils[0],  // dhwEnabled
-                coils[1],  // heatingEnabled
-                coils[2]   // coolingEnabled
+                coils[COIL_TAP_WATER_ENABLED       - COIL_BATCH_START],
+                coils[COIL_HEATING_ENABLED   - COIL_BATCH_START],
+                coils[COIL_COOLING_ENABLED   - COIL_BATCH_START],
+                coils[COIL_HOT_GAS_PUMP      - COIL_BATCH_START],
+                coils[COIL_ANTI_LEGIONELLA   - COIL_BATCH_START],
+                coils[COIL_INTERNAL_HEATER   - COIL_BATCH_START],
+                internalHeaterStep
         );
     }
 
@@ -187,11 +199,11 @@ public class ThermiaHeatPumpService {
         modbusClient.writeHoldingRegister(REG_COMFORT_SETPOINT, raw);
     }
 
-    /** Set DHW start and stop temperatures. */
-    public void setDhwTemperatures(double startCelsius, double stopCelsius) {
-        log.info("Setting DHW temperatures: start={} °C, stop={} °C", startCelsius, stopCelsius);
-        modbusClient.writeHoldingRegister(REG_DHW_START_TEMP, (int) Math.round(startCelsius * 100));
-        modbusClient.writeHoldingRegister(REG_DHW_STOP_TEMP,  (int) Math.round(stopCelsius  * 100));
+    /** Set tap water start and stop temperatures. */
+    public void setTapWaterTemperatures(double startCelsius, double stopCelsius) {
+        log.info("Setting tap water temperatures: start={} °C, stop={} °C", startCelsius, stopCelsius);
+        modbusClient.writeHoldingRegister(REG_TAP_WATER_START_TEMP, (int) Math.round(startCelsius * 100));
+        modbusClient.writeHoldingRegister(REG_TAP_WATER_STOP_TEMP,  (int) Math.round(stopCelsius  * 100));
     }
 
     /** Set all 7 heat curve Y-axis (supply temperature) points, 15–65 °C each. */
@@ -205,14 +217,14 @@ public class ThermiaHeatPumpService {
     // -------------------------------------------------------------------------
     // Write — coil enables
 
-    public void enableDhw() {
-        log.info("Enabling DHW");
-        modbusClient.writeCoil(COIL_DHW_ENABLED, true);
+    public void enableTapWater() {
+        log.info("Enabling tap water");
+        modbusClient.writeCoil(COIL_TAP_WATER_ENABLED, true);
     }
 
-    public void disableDhw() {
-        log.info("Disabling DHW");
-        modbusClient.writeCoil(COIL_DHW_ENABLED, false);
+    public void disableTapWater() {
+        log.info("Disabling tap water");
+        modbusClient.writeCoil(COIL_TAP_WATER_ENABLED, false);
     }
 
     public void enableHeating() {
@@ -233,6 +245,36 @@ public class ThermiaHeatPumpService {
     public void disableCooling() {
         log.info("Disabling active cooling");
         modbusClient.writeCoil(COIL_COOLING_ENABLED, false);
+    }
+
+    public void enableHotGasPump() {
+        log.info("Enabling hot gas pump");
+        modbusClient.writeCoil(COIL_HOT_GAS_PUMP, true);
+    }
+
+    public void disableHotGasPump() {
+        log.info("Disabling hot gas pump");
+        modbusClient.writeCoil(COIL_HOT_GAS_PUMP, false);
+    }
+
+    public void enableAntiLegionella() {
+        log.info("Enabling anti-legionella cycle");
+        modbusClient.writeCoil(COIL_ANTI_LEGIONELLA, true);
+    }
+
+    public void disableAntiLegionella() {
+        log.info("Disabling anti-legionella cycle");
+        modbusClient.writeCoil(COIL_ANTI_LEGIONELLA, false);
+    }
+
+    public void enableInternalAdditionalHeater() {
+        log.info("Enabling internal additional heater");
+        modbusClient.writeCoil(COIL_INTERNAL_HEATER, true);
+    }
+
+    public void disableInternalAdditionalHeater() {
+        log.info("Disabling internal additional heater");
+        modbusClient.writeCoil(COIL_INTERNAL_HEATER, false);
     }
 
     public HeatPumpDataResponse getHeatPumpData() {
@@ -264,12 +306,25 @@ public class ThermiaHeatPumpService {
         curveDto.setOutdoorTemp(Arrays.stream(s.heatCurveX()).boxed().collect(Collectors.toList()));
         curveDto.setSupplyTemp(Arrays.stream(s.heatCurveY()).boxed().collect(Collectors.toList()));
 
+        HeatPumpDataResponse.InternalHeaterDto internalHeaterDto = new HeatPumpDataResponse.InternalHeaterDto();
+        internalHeaterDto.setStep(s.internalHeaterStep());
+
+        HeatPumpDataResponse.EnablesDto enablesDto = new HeatPumpDataResponse.EnablesDto();
+        enablesDto.setHeating(s.heatingEnabled());
+        enablesDto.setTapWater(s.tapWaterEnabled());
+        enablesDto.setCooling(s.coolingEnabled());
+        enablesDto.setHotGasPump(s.hotGasPumpEnabled());
+        enablesDto.setAntiLegionella(s.antiLegionellaEnabled());
+        enablesDto.setInternalHeater(s.internalHeaterEnabled());
+
         HeatPumpDataResponse result = new HeatPumpDataResponse();
         result.setStatus(statusDto);
         result.setTemperatures(tempsDto);
         result.setCompressor(compressorDto);
         result.setHeating(heatingDto);
         result.setHeatCurve(curveDto);
+        result.setInternalHeater(internalHeaterDto);
+        result.setEnables(enablesDto);
         return result;
     }
 
@@ -283,8 +338,8 @@ public class ThermiaHeatPumpService {
         tempsDto.setSystemSupplyOut(t.condenserOutletTemp());
         tempsDto.setSystemSupplyLine(t.systemSupplyLineTemp());
         tempsDto.setSystemSupplySetpoint(t.systemSupplySetpoint());
-        tempsDto.setTapWaterTop(t.dhwTopTemp());
-        tempsDto.setTapWaterLower(t.dhwBottomTemp());
+        tempsDto.setTapWaterTop(t.tapWaterTopTemp());
+        tempsDto.setTapWaterLower(t.tapWaterBottomTemp());
         return tempsDto;
     }
 

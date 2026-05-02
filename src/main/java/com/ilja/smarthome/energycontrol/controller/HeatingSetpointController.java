@@ -2,6 +2,8 @@ package com.ilja.smarthome.energycontrol.controller;
 
 import com.ilja.smarthome.energycontrol.dto.heating.SetpointScheduleItemRequest;
 import com.ilja.smarthome.energycontrol.dto.heating.SetpointScheduleItemResponse;
+import com.ilja.smarthome.energycontrol.dto.heating.WeeklyScheduleEntryDto;
+import com.ilja.smarthome.energycontrol.dto.heating.WeeklyScheduleEntryRequest;
 import com.ilja.smarthome.energycontrol.service.HeatingSetpointService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -30,6 +32,23 @@ public class HeatingSetpointController {
     @Autowired
     public HeatingSetpointController(HeatingSetpointService heatingSetpointService) {
         this.heatingSetpointService = heatingSetpointService;
+    }
+
+    @GetMapping("/weekly-schedule")
+    @Operation(summary = "Get default weekly heating schedule template")
+    @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN', 'ROLE_READONLY')")
+    public ResponseEntity<List<WeeklyScheduleEntryDto>> getWeeklySchedule() {
+        return ResponseEntity.ok(heatingSetpointService.getWeeklySchedule());
+    }
+
+    @PutMapping("/weekly-schedule")
+    @Operation(summary = "Replace default weekly heating schedule template",
+               description = "Deletes all existing weekly schedule entries and replaces them with the provided list")
+    @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN')")
+    public ResponseEntity<Void> saveWeeklySchedule(@RequestBody List<WeeklyScheduleEntryRequest> entries) {
+        log.info("Replacing weekly schedule with {} entries", entries.size());
+        heatingSetpointService.saveWeeklySchedule(entries);
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/schedule")

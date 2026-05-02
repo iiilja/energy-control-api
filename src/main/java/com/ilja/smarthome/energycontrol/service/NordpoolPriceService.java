@@ -89,6 +89,13 @@ public class NordpoolPriceService {
         return priceRepository.findPriceAtTimestamp(timestamp);
     }
 
+    public List<NordpoolPrice> getPricesForDate(LocalDate date) {
+        LocalDate targetDate = date != null ? date : LocalDate.now(EUROPE_TALLINN);
+        ZonedDateTime start = targetDate.atStartOfDay(EUROPE_TALLINN);
+        ZonedDateTime end = start.plusDays(1);
+        return priceRepository.findByPriceTimestampBetweenOrderByPriceTimestampAsc(start, end);
+    }
+
     public List<NordpoolPrice> getPricesForToday() {
         ZonedDateTime startOfDay = ZonedDateTime.now(EUROPE_TALLINN).toLocalDate().atStartOfDay(EUROPE_TALLINN);
         ZonedDateTime endOfDay = startOfDay.plusDays(1);

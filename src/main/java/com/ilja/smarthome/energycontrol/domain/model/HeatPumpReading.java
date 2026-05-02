@@ -1,15 +1,12 @@
 package com.ilja.smarthome.energycontrol.domain.model;
 
-import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.Type;
 
 import java.time.LocalDateTime;
 
 /**
  * Main entity representing a complete heat pump data reading.
- * Stores all data collected from the ESP32 device at a specific point in time.
  */
 @Entity
 @Table(name = "heat_pump_readings")
@@ -43,11 +40,6 @@ public class HeatPumpReading {
 
     @Embedded
     private HeatCurveData heatCurve;
-
-    // Raw JSON for flexibility and debugging
-    @Type(JsonBinaryType.class)
-    @Column(name = "raw_json", columnDefinition = "jsonb")
-    private String rawJson;
 
     /**
      * Called before persisting a new entity.

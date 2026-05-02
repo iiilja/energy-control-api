@@ -5,6 +5,8 @@ import com.ilja.smarthome.energycontrol.domain.model.HeatingSetpointSchedule;
 import com.ilja.smarthome.energycontrol.domain.model.NordpoolPrice;
 import com.ilja.smarthome.energycontrol.dto.heating.SetpointScheduleItemRequest;
 import com.ilja.smarthome.energycontrol.dto.heating.SetpointScheduleItemResponse;
+import com.ilja.smarthome.energycontrol.dto.heating.WeeklyScheduleEntryDto;
+import com.ilja.smarthome.energycontrol.dto.heating.WeeklyScheduleEntryRequest;
 import com.ilja.smarthome.energycontrol.repository.DefaultWeeklyScheduleRepository;
 import com.ilja.smarthome.energycontrol.repository.HeatingSetpointScheduleRepository;
 import com.ilja.smarthome.energycontrol.repository.NordpoolPriceRepository;
@@ -162,6 +164,27 @@ public class HeatingSetpointService {
         }
 
         return applicable != null ? applicable.getSetpoint() : getDefaultSetpoint();
+    }
+
+    public List<WeeklyScheduleEntryDto> getWeeklySchedule() {
+        return weeklyScheduleRepository.findAllByOrderByDayOfWeekAscStartTimeAsc()
+                .stream()
+                .map(e -> new WeeklyScheduleEntryDto(
+                        e.getId(),
+                        e.getDayOfWeek(),
+                        e.getStartTime().toString(),
+                        e.getSetpoint()))
+                .toList();
+    }
+
+    @Transactional
+    public void saveWeeklySchedule(List<WeeklyScheduleEntryRequest> requests) {
+        weeklyScheduleRepository.deleteAll();
+        List<DefaultWeeklySchedule> entries = requests.stream()
+                .map(r -> new DefaultWeeklySchedule(r.dayOfWeek(), LocalTime.parse(r.startTime()), r.setpoint()))
+                .toList();
+        weeklyScheduleRepository.saveAll(entries);
+        log.info("Saved weekly schedule with {} entries", entries.size());
     }
 
     private BigDecimal getDefaultSetpoint() {

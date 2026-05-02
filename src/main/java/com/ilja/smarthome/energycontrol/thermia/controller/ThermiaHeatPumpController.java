@@ -1,7 +1,7 @@
 package com.ilja.smarthome.energycontrol.thermia.controller;
 
 import com.ilja.smarthome.energycontrol.thermia.dto.HeatPumpDataResponse;
-import com.ilja.smarthome.energycontrol.thermia.dto.ThermiaDhwTemperaturesRequest;
+import com.ilja.smarthome.energycontrol.thermia.dto.ThermiaTapWaterTemperaturesRequest;
 import com.ilja.smarthome.energycontrol.thermia.dto.ThermiaHeatCurveRequest;
 import com.ilja.smarthome.energycontrol.thermia.dto.ThermiaOperationModeRequest;
 import com.ilja.smarthome.energycontrol.thermia.dto.ThermiaSetpointRequest;
@@ -78,11 +78,11 @@ public class ThermiaHeatPumpController {
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("dhw-temperatures")
+    @PostMapping("tap-water-temperatures")
     @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN')")
-    @Operation(summary = "Set domestic hot water start/stop temperatures")
-    public ResponseEntity<Void> setDhwTemperatures(@Valid @RequestBody ThermiaDhwTemperaturesRequest request) {
-        heatPumpService.setDhwTemperatures(request.startTemperature(), request.stopTemperature());
+    @Operation(summary = "Set tap water start/stop temperatures")
+    public ResponseEntity<Void> setTapWaterTemperatures(@Valid @RequestBody ThermiaTapWaterTemperaturesRequest request) {
+        heatPumpService.setTapWaterTemperatures(request.startTemperature(), request.stopTemperature());
         return ResponseEntity.noContent().build();
     }
 
@@ -111,19 +111,19 @@ public class ThermiaHeatPumpController {
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("dhw/enable")
+    @PostMapping("tap-water/enable")
     @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN')")
-    @Operation(summary = "Enable domestic hot water production")
-    public ResponseEntity<Void> enableDhw() {
-        heatPumpService.enableDhw();
+    @Operation(summary = "Enable tap water production")
+    public ResponseEntity<Void> enableTapWater() {
+        heatPumpService.enableTapWater();
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("dhw/disable")
+    @PostMapping("tap-water/disable")
     @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN')")
-    @Operation(summary = "Disable domestic hot water production")
-    public ResponseEntity<Void> disableDhw() {
-        heatPumpService.disableDhw();
+    @Operation(summary = "Disable tap water production")
+    public ResponseEntity<Void> disableTapWater() {
+        heatPumpService.disableTapWater();
         return ResponseEntity.noContent().build();
     }
 
@@ -140,6 +140,54 @@ public class ThermiaHeatPumpController {
     @Operation(summary = "Disable active cooling")
     public ResponseEntity<Void> disableCooling() {
         heatPumpService.disableCooling();
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("hot-gas-pump/enable")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    @Operation(summary = "Enable hot gas pump (coil 14 / de-facto 15)")
+    public ResponseEntity<Void> enableHotGasPump() {
+        heatPumpService.enableHotGasPump();
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("hot-gas-pump/disable")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    @Operation(summary = "Disable hot gas pump (coil 14 / de-facto 15)")
+    public ResponseEntity<Void> disableHotGasPump() {
+        heatPumpService.disableHotGasPump();
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("anti-legionella/enable")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    @Operation(summary = "Manually trigger anti-legionella cycle (coil 24 / de-facto 25)")
+    public ResponseEntity<Void> enableAntiLegionella() {
+        heatPumpService.enableAntiLegionella();
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("anti-legionella/disable")
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    @Operation(summary = "Stop anti-legionella cycle (coil 24 / de-facto 25)")
+    public ResponseEntity<Void> disableAntiLegionella() {
+        heatPumpService.disableAntiLegionella();
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("internal-heater/enable")
+    @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN')")
+    @Operation(summary = "Enable internal additional heater (coil 4 / de-facto 5)")
+    public ResponseEntity<Void> enableInternalAdditionalHeater() {
+        heatPumpService.enableInternalAdditionalHeater();
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("internal-heater/disable")
+    @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN')")
+    @Operation(summary = "Disable internal additional heater (coil 4 / de-facto 5)")
+    public ResponseEntity<Void> disableInternalAdditionalHeater() {
+        heatPumpService.disableInternalAdditionalHeater();
         return ResponseEntity.noContent().build();
     }
 }

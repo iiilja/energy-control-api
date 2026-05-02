@@ -4,8 +4,8 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 
-/** Request body for configuring domestic hot water start/stop temperatures. */
-public record ThermiaDhwTemperaturesRequest(
+/** Request body for configuring tap water start/stop temperatures. */
+public record ThermiaTapWaterTemperaturesRequest(
         @NotNull @DecimalMin("30.0") @DecimalMax("60.0")
         Double startTemperature,
 

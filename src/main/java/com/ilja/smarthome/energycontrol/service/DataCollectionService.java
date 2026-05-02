@@ -1,6 +1,5 @@
 package com.ilja.smarthome.energycontrol.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ilja.smarthome.energycontrol.domain.model.*;
 import com.ilja.smarthome.energycontrol.thermia.dto.HeatPumpDataResponse;
 import com.ilja.smarthome.energycontrol.thermia.exception.ThermiaCommException;
@@ -21,16 +20,13 @@ public class DataCollectionService {
 
     private final ThermiaHeatPumpService thermiaService;
     private final HeatPumpReadingRepository readingRepository;
-    private final ObjectMapper objectMapper;
 
     @Autowired
     public DataCollectionService(
             ThermiaHeatPumpService thermiaService,
-            HeatPumpReadingRepository readingRepository,
-            ObjectMapper objectMapper) {
+            HeatPumpReadingRepository readingRepository) {
         this.thermiaService = thermiaService;
         this.readingRepository = readingRepository;
-        this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -42,12 +38,6 @@ public class DataCollectionService {
 
             HeatPumpReading reading = mapResponseToReading(response);
             reading.setCollectionTimestamp(LocalDateTime.now());
-
-            try {
-                reading.setRawJson(objectMapper.writeValueAsString(response));
-            } catch (Exception e) {
-                log.warn("Failed to serialize response to JSON: {}", e.getMessage());
-            }
 
             HeatPumpReading saved = readingRepository.save(reading);
 

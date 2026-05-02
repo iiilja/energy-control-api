@@ -11,6 +11,8 @@ public class HeatPumpDataResponse {
     private CompressorDto compressor;
     private HeatingDto heating;
     private HeatCurveDto heatCurve;
+    private InternalHeaterDto internalHeater;
+    private EnablesDto enables;
 
     @Data
     public static class StatusDto {
@@ -55,5 +57,20 @@ public class HeatPumpDataResponse {
     public static class HeatCurveDto {
         private List<Double> outdoorTemp;
         private List<Double> supplyTemp;
+    }
+
+    @Data
+    public static class InternalHeaterDto {
+        private Integer step;
+    }
+
+    @Data
+    public static class EnablesDto {
+        private Boolean heating;
+        private Boolean tapWater;
+        private Boolean cooling;
+        private Boolean hotGasPump;
+        private Boolean antiLegionella;
+        private Boolean internalHeater;
     }
 }

@@ -10,8 +10,8 @@ package com.ilja.smarthome.energycontrol.thermia.dto;
  * @param brineOutletTemp        ground loop output temperature (FC04 reg 12)
  * @param systemSupplyLineTemp   measured supply line temperature (FC04 reg 13)
  * @param outdoorTemp            outdoor ambient temperature (FC04 reg 14)
- * @param dhwTopTemp             domestic hot water tank top (FC04 reg 16)
- * @param dhwBottomTemp          domestic hot water tank bottom (FC04 reg 17)
+ * @param tapWaterTopTemp        tap water tank top temperature (FC04 reg 16)
+ * @param tapWaterBottomTemp     tap water tank bottom temperature (FC04 reg 17)
  * @param systemSupplySetpoint   calculated supply line target temperature (FC04 reg 19)
  */
 public record ThermiaTemperaturesResponse(
@@ -22,7 +22,7 @@ public record ThermiaTemperaturesResponse(
         double brineOutletTemp,
         double systemSupplyLineTemp,
         double outdoorTemp,
-        double dhwTopTemp,
-        double dhwBottomTemp,
+        double tapWaterTopTemp,
+        double tapWaterBottomTemp,
         double systemSupplySetpoint
 ) {}
