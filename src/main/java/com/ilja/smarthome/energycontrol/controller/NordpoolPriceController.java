@@ -42,6 +42,15 @@ public class NordpoolPriceController {
         return ResponseEntity.ok(result);
     }
 
+    @GetMapping("/current-price")
+    @Operation(summary = "Get current Nordpool price",
+               description = "Returns the Nordpool electricity price for the current hour (Europe/Tallinn timezone)")
+    public ResponseEntity<NordpoolPriceDto> getCurrentPrice() {
+        return nordpoolPriceService.getCurrentPrice()
+                .map(p -> ResponseEntity.ok(new NordpoolPriceDto(p.getPriceTimestamp().toOffsetDateTime().toString(), p.getPrice())))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @PostMapping("/fetch")
     @Operation(summary = "Manually trigger Nordpool price fetch",
                description = "Fetches current Nordpool prices from Elering API and stores them in the database. Normally runs automatically at 15:00 daily.")
