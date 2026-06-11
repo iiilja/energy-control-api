@@ -42,6 +42,18 @@ public class NordpoolPriceController {
         return ResponseEntity.ok(result);
     }
 
+    @GetMapping("/prices/hourly-average")
+    @Operation(summary = "Get hourly average Nordpool prices for a date range",
+               description = "Returns Nordpool prices averaged per hour for the given date range (defaults to today, Europe/Tallinn timezone)")
+    public ResponseEntity<List<NordpoolPriceDto>> getHourlyAveragePrices(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        List<NordpoolPriceDto> result = nordpoolPriceService.getHourlyAveragePricesForDate(date)
+                .stream()
+                .map(p -> new NordpoolPriceDto(p.getPriceTimestamp().toOffsetDateTime().toString(), p.getPrice()))
+                .toList();
+        return ResponseEntity.ok(result);
+    }
+
     @GetMapping("/current-price")
     @Operation(summary = "Get current Nordpool price",
                description = "Returns the Nordpool electricity price for the current hour (Europe/Tallinn timezone)")

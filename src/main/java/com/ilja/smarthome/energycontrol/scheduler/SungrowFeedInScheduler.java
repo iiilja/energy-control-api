@@ -42,40 +42,46 @@ public class SungrowFeedInScheduler {
             return;
         }
 
-        var currentPrice = nordpoolPriceService.getCurrentPrice();
+        var currentPrice = nordpoolPriceService.getCurrentHourAveragePrice();
         if (currentPrice.isEmpty()) {
             log.warn("No current Nordpool price available — skipping feed-in limit adjustment");
             return;
         }
 
-        BigDecimal price = currentPrice.get().getPrice();
+        BigDecimal price = currentPrice.get();
         boolean shouldLimit = price.compareTo(BigDecimal.valueOf(priceThresholdEurMwh)) < 0;
 
         log.debug("Nordpool price: {} EUR/MWh, threshold: {} EUR/MWh, shouldLimit: {}",
                 price, priceThresholdEurMwh, shouldLimit);
 
         try {
-            SungrowStatusResponse status = sungrowService.getStatus();
+            boolean powerLimitEnabled = sungrowService.isPowerLimitEnabled();
 
             if (shouldLimit) {
-                boolean alreadyLimited = status.powerLimitEnabled()
-                        && Math.abs(status.powerLimitKw() - limitKw) < 0.05;
-                if (alreadyLimited) {
-                    log.debug("Feed-in limit already set to {} kW — no change needed", limitKw);
-                    return;
-                }
-                log.info("Price {} EUR/MWh is below threshold {} EUR/MWh — limiting feed-in to {} kW",
-                        price, priceThresholdEurMwh, limitKw);
-                sungrowService.setPowerLimitKw(limitKw);
-                sungrowService.enablePowerLimit();
-            } else {
-                if (!status.powerLimitEnabled()) {
-                    log.debug("Feed-in limit already disabled — no change needed");
-                    return;
-                }
-                log.info("Price {} EUR/MWh is at or above threshold {} EUR/MWh — disabling feed-in limit",
+                log.info("Price {} EUR/MWh is below threshold {} EUR/MWh",
                         price, priceThresholdEurMwh);
-                sungrowService.disablePowerLimit();
+                if (!powerLimitEnabled) {
+                    log.info("Enabling feed-in limit");
+                    sungrowService.enablePowerLimit();
+                } else {
+                    log.info("Feed-in limit already enabled");
+                }
+                double powerLimitKw = sungrowService.getPowerLimitKw();
+
+                if (powerLimitKw != limitKw) {
+                    log.info("Adjusting feed-in limit from {} kW to {} kW", powerLimitKw, limitKw);
+                    sungrowService.setPowerLimitKw(limitKw);
+                } else {
+                    log.debug("Feed-in limit already set to {} kW — no change needed", limitKw);
+                }
+            } else {
+                if (powerLimitEnabled) {
+                    log.info("Price {} EUR/MWh is at or above threshold {} EUR/MWh — disabling feed-in limit",
+                            price, priceThresholdEurMwh);
+                    sungrowService.disablePowerLimit();
+                } else {
+                    log.debug("Feed-in limit already disabled — no change needed");
+                }
             }
         } catch (SungrowCommunicationException e) {
             log.warn("Sungrow communication failed during feed-in limit adjustment: {}", e.getMessage());

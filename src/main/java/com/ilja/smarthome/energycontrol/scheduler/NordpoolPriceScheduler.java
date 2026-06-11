@@ -32,7 +32,7 @@ public class NordpoolPriceScheduler {
         this.configService = configService;
     }
 
-    @Scheduled(cron = "${nordpool.fetch.cron:0 00 20 * * *}")
+    @Scheduled(cron = "${nordpool.fetch.cron:0 0 14-23 * * *}", zone = "Europe/Tallinn")
     public void fetchDailyPrices() {
         boolean enabled = Boolean.parseBoolean(
                 configService.getConfigValue("nordpool.fetch.enabled", "true")
@@ -44,12 +44,17 @@ public class NordpoolPriceScheduler {
         }
 
         try {
+            LocalDate tomorrow = LocalDate.now(EUROPE_TALLINN).plusDays(1);
+            if (nordpoolPriceService.hasPricesForDate(tomorrow)) {
+                log.debug("Nordpool prices for {} already stored, skipping fetch", tomorrow);
+                return;
+            }
+
             log.info("Starting scheduled Nordpool price fetch");
             int pricesStored = nordpoolPriceService.fetchAndStorePrices();
             log.info("Scheduled Nordpool price fetch completed. Stored {} new price entries", pricesStored);
 
             if (pricesStored > 0) {
-                LocalDate tomorrow = LocalDate.now(EUROPE_TALLINN).plusDays(1);
                 log.info("Applying weekly template to tomorrow's date: {}", tomorrow);
                 int schedulesCreated = heatingSetpointService.applyWeeklyTemplateToDate(tomorrow);
                 log.info("Applied weekly template. Created {} heating setpoint schedules for {}", schedulesCreated, tomorrow);

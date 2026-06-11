@@ -10,13 +10,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -104,6 +108,37 @@ public class NordpoolPriceService {
 
     public List<NordpoolPrice> getPricesForDateRange(ZonedDateTime start, ZonedDateTime end) {
         return priceRepository.findByPriceTimestampBetweenOrderByPriceTimestampAsc(start, end);
+    }
+
+    public List<NordpoolPrice> getHourlyAveragePricesForDate(LocalDate date) {
+        LocalDate targetDate = date != null ? date : LocalDate.now(EUROPE_TALLINN);
+        ZonedDateTime start = targetDate.atStartOfDay(EUROPE_TALLINN);
+        ZonedDateTime end = start.plusDays(1);
+        return getHourlyAveragePricesForDateRange(start, end);
+    }
+
+    public List<NordpoolPrice> getHourlyAveragePricesForDateRange(ZonedDateTime start, ZonedDateTime end) {
+        return priceRepository.findByPriceTimestampBetweenOrderByPriceTimestampAsc(start, end)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        p -> p.getPriceTimestamp().truncatedTo(ChronoUnit.HOURS),
+                        LinkedHashMap::new,
+                        Collectors.averagingDouble(p -> p.getPrice().doubleValue())
+                ))
+                .entrySet().stream()
+                .map(e -> new NordpoolPrice(e.getKey(), BigDecimal.valueOf(e.getValue()).setScale(4, RoundingMode.HALF_UP)))
+                .collect(Collectors.toList());
+    }
+
+    public Optional<BigDecimal> getCurrentHourAveragePrice() {
+        ZonedDateTime hourStart = ZonedDateTime.now(EUROPE_TALLINN).truncatedTo(ChronoUnit.HOURS);
+        return priceRepository.findAveragePriceBetween(hourStart, hourStart.plusHours(1));
+    }
+
+    public boolean hasPricesForDate(LocalDate date) {
+        ZonedDateTime start = date.atStartOfDay(EUROPE_TALLINN);
+        ZonedDateTime end = start.plusDays(1);
+        return priceRepository.countByPriceTimestampBetween(start, end) == 96;
     }
 
     @Transactional
