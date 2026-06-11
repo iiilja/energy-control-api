@@ -45,16 +45,12 @@ public class SungrowInverterController {
     @PostMapping("power-limit")
     @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN')")
     @Operation(summary = "Set feed-in power limit",
-               description = "Provide 'kw' (takes precedence) or 'percent'. Also enables the limit automatically.")
+               description = "Provide 'kw' (takes precedence) or 'percent'. Enables the limit first if it is currently disabled.")
     public ResponseEntity<Void> setPowerLimit(@Valid @RequestBody SungrowPowerLimitRequest request) {
-        if (request.hasKw()) {
-            inverterService.setPowerLimitKw(request.kw());
-        } else if (request.percent() != null) {
-            inverterService.setPowerLimitPercent(request.percent());
-        } else {
+        if (!request.hasKw() && request.percent() == null) {
             return ResponseEntity.badRequest().build();
         }
-        inverterService.enablePowerLimit();
+        inverterService.applyPowerLimit(request.kw(), request.percent());
         return ResponseEntity.noContent().build();
     }
 

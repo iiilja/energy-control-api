@@ -67,7 +67,7 @@ thermia:
 # Sungrow feed-in limit scheduler (1.1 cent/kWh = 11.0 EUR/MWh)
 # Enable via DB config key: sungrow.feed_in_limit.enabled = true
 feed-in-limit:
-  price-threshold-eur-mwh: ${FEED_IN_PRICE_THRESHOLD_EUR_MWH:11.0}
+  price-threshold-eur-mwh: ${FEED_IN_PRICE_THRESHOLD_EUR_MWH:17.0}
   limit-kw: ${FEED_IN_LIMIT_KW:3.0}
 
 # Collection scheduler configuration

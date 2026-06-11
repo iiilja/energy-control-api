@@ -85,6 +85,21 @@ public class SungrowInverterService {
     // Power limit control
 
     /**
+     * Enable limit if not already on, then write the limit value.
+     * The inverter requires the switch to be enabled before accepting a limit value.
+     */
+    public void applyPowerLimit(Double kw, Double percent) {
+        if (!isPowerLimitEnabled()) {
+            enablePowerLimit();
+        }
+        if (kw != null) {
+            setPowerLimitKw(kw);
+        } else {
+            setPowerLimitPercent(percent);
+        }
+    }
+
+    /**
      * Set the power feed-in limit as a percentage of rated power.
      *
      * @param percent 0.0–110.0 (register unit is 0.1%, so 13.3% → write 133)
@@ -110,6 +125,14 @@ public class SungrowInverterService {
         int raw = (int) Math.round(kw * 10);
         log.info("Setting power limit to {} kW (raw {})", kw, raw);
         modbusClient.writeHoldingRegister(REG_POWER_LIMIT_KW, raw);
+    }
+
+    public boolean isPowerLimitEnabled() {
+        return modbusClient.readHoldingRegister(REG_POWER_LIMIT_SWITCH) == CMD_LIMIT_ON;
+    }
+
+    public double getPowerLimitKw() {
+        return modbusClient.readHoldingRegister(REG_POWER_LIMIT_KW) / 10.0;
     }
 
     /**
