@@ -1,5 +1,6 @@
 package com.ilja.smarthome.energycontrol.controller;
 
+import com.ilja.smarthome.energycontrol.dto.nordpool.CurrentNordpoolPriceDto;
 import com.ilja.smarthome.energycontrol.dto.nordpool.NordpoolPriceDto;
 import com.ilja.smarthome.energycontrol.service.NordpoolPriceService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -56,10 +57,16 @@ public class NordpoolPriceController {
 
     @GetMapping("/current-price")
     @Operation(summary = "Get current Nordpool price",
-               description = "Returns the Nordpool electricity price for the current hour (Europe/Tallinn timezone)")
-    public ResponseEntity<NordpoolPriceDto> getCurrentPrice() {
+               description = "Returns the current 15-min slot price and the hourly average for the current hour (Europe/Tallinn timezone)")
+    public ResponseEntity<CurrentNordpoolPriceDto> getCurrentPrice() {
         return nordpoolPriceService.getCurrentPrice()
-                .map(p -> ResponseEntity.ok(new NordpoolPriceDto(p.getPriceTimestamp().toOffsetDateTime().toString(), p.getPrice())))
+                .map(p -> {
+                    var hourlyAvg = nordpoolPriceService.getCurrentHourAveragePrice().orElse(null);
+                    return ResponseEntity.ok(new CurrentNordpoolPriceDto(
+                            p.getPriceTimestamp().toOffsetDateTime().toString(),
+                            p.getPrice(),
+                            hourlyAvg));
+                })
                 .orElse(ResponseEntity.notFound().build());
     }
 
