@@ -96,7 +96,7 @@ public class NordpoolPriceService {
     public List<NordpoolPrice> getPricesForDate(LocalDate date) {
         LocalDate targetDate = date != null ? date : LocalDate.now(EUROPE_TALLINN);
         ZonedDateTime start = targetDate.atStartOfDay(EUROPE_TALLINN);
-        ZonedDateTime end = start.plusDays(1);
+        ZonedDateTime end = start.plusDays(1).minusSeconds(1);
         return priceRepository.findByPriceTimestampBetweenOrderByPriceTimestampAsc(start, end);
     }
 
@@ -113,7 +113,7 @@ public class NordpoolPriceService {
     public List<NordpoolPrice> getHourlyAveragePricesForDate(LocalDate date) {
         LocalDate targetDate = date != null ? date : LocalDate.now(EUROPE_TALLINN);
         ZonedDateTime start = targetDate.atStartOfDay(EUROPE_TALLINN);
-        ZonedDateTime end = start.plusDays(1);
+        ZonedDateTime end = start.plusDays(1).minusSeconds(1);
         return getHourlyAveragePricesForDateRange(start, end);
     }
 
@@ -137,7 +137,7 @@ public class NordpoolPriceService {
 
     public boolean hasPricesForDate(LocalDate date) {
         ZonedDateTime start = date.atStartOfDay(EUROPE_TALLINN);
-        ZonedDateTime end = start.plusDays(1);
+        ZonedDateTime end = start.plusDays(1).minusSeconds(1);
         return priceRepository.countByPriceTimestampBetween(start, end) == 96;
     }
 
