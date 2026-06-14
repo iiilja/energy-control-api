@@ -1,10 +1,22 @@
 # Banana Pi (ARMv7) Dockerfile — uses Jammy (Ubuntu 22.04) base images
 # which have linux/arm/v7 support, unlike Alpine-based images.
+# Uses a plain JDK image + manual Gradle install to avoid QEMU incompatibility
+# with the official Gradle Docker image.
 
 # ===========================================================================
 # Build Stage
 # ===========================================================================
-FROM gradle:8.5-jdk17-jammy AS build
+FROM eclipse-temurin:17-jdk-jammy AS build
+
+ENV GRADLE_VERSION=8.5
+
+RUN apt-get update && apt-get install -y --no-install-recommends wget unzip && \
+    wget -q https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip -P /tmp && \
+    unzip -q /tmp/gradle-${GRADLE_VERSION}-bin.zip -d /opt && \
+    rm /tmp/gradle-${GRADLE_VERSION}-bin.zip && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/opt/gradle-${GRADLE_VERSION}/bin:${PATH}"
 
 WORKDIR /app
 
