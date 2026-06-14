@@ -1,0 +1,40 @@
+# Banana Pi (ARMv7) Dockerfile — uses Jammy (Ubuntu 22.04) base images
+# which have linux/arm/v7 support, unlike Alpine-based images.
+
+# ===========================================================================
+# Build Stage
+# ===========================================================================
+FROM gradle:8.5-jdk17-jammy AS build
+
+WORKDIR /app
+
+COPY gradle/ gradle/
+COPY build.gradle .
+COPY settings.gradle .
+COPY src/ src/
+
+RUN gradle build -x test --no-daemon
+
+# ===========================================================================
+# Runtime Stage
+# ===========================================================================
+FROM eclipse-temurin:17-jre-jammy
+
+WORKDIR /app
+
+RUN groupadd -r spring && useradd -r -g spring spring
+
+RUN mkdir -p /app/logs && chown spring:spring /app/logs
+
+COPY --from=build /app/build/libs/*.jar app.jar
+
+RUN chown spring:spring app.jar
+
+USER spring:spring
+
+EXPOSE 8080
+
+# Reduced heap for 1 GB device — leaves room for PostgreSQL and OS
+ENV JAVA_OPTS="-Xms128m -Xmx384m"
+
+ENTRYPOINT ["java", "-jar", "app.jar"]
