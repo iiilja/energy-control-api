@@ -7,8 +7,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 /**
  * Main application class for Energy Control API.
  *
- * This Spring Boot application collects heat pump data from ESP32 devices,
- * stores it in PostgreSQL, and exposes it via OAuth2-secured REST APIs.
+ * This Spring Boot application controls the Thermia heat pump via Modbus TCP,
+ * stores readings in PostgreSQL, and integrates Nordpool electricity prices.
  */
 @SpringBootApplication
 @EnableScheduling

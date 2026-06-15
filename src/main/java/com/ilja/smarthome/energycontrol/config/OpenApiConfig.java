@@ -26,7 +26,7 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("Energy Control API")
                         .version("1.0.0-SNAPSHOT")
-                        .description("REST API for collecting, storing, and managing heat pump data from ESP32 devices with Nordpool electricity price integration")
+                        .description("REST API for controlling the Thermia heat pump via Modbus TCP and integrating Nordpool electricity prices")
                         .contact(new Contact()
                                 .name("Energy Control API")
                                 .email("admin@energy-control.local"))

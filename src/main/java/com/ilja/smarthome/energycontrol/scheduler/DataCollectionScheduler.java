@@ -1,9 +1,9 @@
 package com.ilja.smarthome.energycontrol.scheduler;
 
 import com.ilja.smarthome.energycontrol.domain.model.HeatPumpReading;
-import com.ilja.smarthome.energycontrol.exception.ESP32CommunicationException;
 import com.ilja.smarthome.energycontrol.service.ConfigurationService;
 import com.ilja.smarthome.energycontrol.service.DataCollectionService;
+import com.ilja.smarthome.energycontrol.thermia.exception.ThermiaCommException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Scheduler for automatic heat pump data collection.
- * Collects data from ESP32 at regular intervals.
+ * Collects data from Thermia heat pump at regular intervals via Modbus TCP.
  */
 @Component
 @Slf4j
@@ -29,7 +29,7 @@ public class DataCollectionScheduler {
     }
 
     /**
-     * Scheduled task to collect data from ESP32.
+     * Scheduled task to collect data from Thermia heat pump.
      * Runs at fixed delay (not fixed rate) to prevent overlapping executions.
      * Interval is configured via collection.interval.ms property (default 60000ms = 1 minute).
      */
@@ -52,8 +52,8 @@ public class DataCollectionScheduler {
                     reading.getId(),
                     reading.getTemperatures() != null ? reading.getTemperatures().getOutdoorTemp() : "N/A");
 
-        } catch (ESP32CommunicationException e) {
-            log.warn("ESP32 communication failed during scheduled collection: {}",
+        } catch (ThermiaCommException e) {
+            log.warn("Thermia communication failed during scheduled collection: {}",
                     e.getMessage());
             // Don't rethrow - let scheduler continue on next iteration
 
