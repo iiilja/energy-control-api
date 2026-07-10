@@ -3,9 +3,12 @@
 # Stage 2: Run the application using JRE
 
 # ===========================================================================
-# Build Stage
+# Build Stage — native platform (no QEMU)
 # ===========================================================================
-FROM gradle:8.5-jdk17-alpine AS build
+# Runs on the host's native platform (x86_64 on GitHub Actions) so Gradle
+# never runs under QEMU emulation. The JAR is pure Java bytecode and runs
+# unchanged on the target arch (e.g. arm64).
+FROM --platform=$BUILDPLATFORM gradle:8.5-jdk17-alpine AS build
 
 WORKDIR /app
 

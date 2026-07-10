@@ -10,7 +10,7 @@ Spring Boot application for smart home energy control — Thermia heat pump mana
 - **Scheduled data collection** — heat pump readings stored to PostgreSQL every minute
 - **REST API** — secured with HTTP Basic Auth, role-based access (READONLY / USER / ADMIN)
 - **OpenAPI/Swagger UI** — available at `/swagger-ui.html`
-- **Docker support** — multi-stage Dockerfile, ARM v7 image built via GitHub Actions
+- **Docker support** — multi-stage Dockerfile, ARM64 image built via GitHub Actions (H96 Pro+ / Amlogic S912)
 
 ## Technology Stack
 
@@ -209,12 +209,13 @@ src/main/java/com/ilja/smarthome/energycontrol/
 ├── heating/                       # Heating schedules (service, controller)
 └── exception/                     # Custom exceptions
 docker/
-├── Dockerfile                     # Standard image
-├── Dockerfile.armv7               # ARMv7 image (Banana Pi, etc.)
+├── Dockerfile                     # Standard image (amd64, arm64)
+├── Dockerfile.armv7               # ARMv7 image (legacy — Banana Pi, manual dispatch only)
 ├── docker-compose.yml
 └── postgres/init.sql
 .github/workflows/
-└── build-armv7.yml                # Builds and pushes ARMv7 image to ghcr.io
+├── build-arm64.yml                # Builds and pushes ARM64 image to ghcr.io (H96 Pro+)
+└── build-armv7.yml                # Legacy ARMv7 build — manual dispatch only
 ```
 
 ## Troubleshooting
