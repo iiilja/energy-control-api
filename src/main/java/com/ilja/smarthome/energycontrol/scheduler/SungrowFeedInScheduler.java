@@ -2,7 +2,6 @@ package com.ilja.smarthome.energycontrol.scheduler;
 
 import com.ilja.smarthome.energycontrol.service.ConfigurationService;
 import com.ilja.smarthome.energycontrol.service.NordpoolPriceService;
-import com.ilja.smarthome.energycontrol.sungrow.dto.SungrowStatusResponse;
 import com.ilja.smarthome.energycontrol.sungrow.exception.SungrowCommunicationException;
 import com.ilja.smarthome.energycontrol.sungrow.service.SungrowInverterService;
 import lombok.extern.slf4j.Slf4j;
@@ -42,13 +41,13 @@ public class SungrowFeedInScheduler {
             return;
         }
 
-        var currentPrice = nordpoolPriceService.getCurrentHourAveragePrice();
+        var currentPrice = nordpoolPriceService.getCurrentPrice();
         if (currentPrice.isEmpty()) {
             log.warn("No current Nordpool price available — skipping feed-in limit adjustment");
             return;
         }
 
-        BigDecimal price = currentPrice.get();
+        BigDecimal price = currentPrice.get().getPrice();
         boolean shouldLimit = price.compareTo(BigDecimal.valueOf(priceThresholdEurMwh)) < 0;
 
         log.debug("Nordpool price: {} EUR/MWh, threshold: {} EUR/MWh, shouldLimit: {}",
