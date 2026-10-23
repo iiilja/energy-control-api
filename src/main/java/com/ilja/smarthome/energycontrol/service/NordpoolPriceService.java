@@ -11,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -28,16 +30,20 @@ public class NordpoolPriceService {
 
     private static final String ESTONIA_REGION = "ee";
     private static final ZoneId EUROPE_TALLINN = ZoneId.of("Europe/Tallinn");
+    private static final Duration SLOT_LENGTH = Duration.ofMinutes(15);
 
     private final EleringApiClientService eleringClient;
     private final NordpoolPriceRepository priceRepository;
+    private final Clock clock;
 
     @Autowired
     public NordpoolPriceService(
             EleringApiClientService eleringClient,
-            NordpoolPriceRepository priceRepository) {
+            NordpoolPriceRepository priceRepository,
+            Clock clock) {
         this.eleringClient = eleringClient;
         this.priceRepository = priceRepository;
+        this.clock = clock;
     }
 
     @Transactional
@@ -45,7 +51,7 @@ public class NordpoolPriceService {
         log.info("Fetching Nordpool prices from Elering API");
 
         try {
-            LocalDate today = LocalDate.now(EUROPE_TALLINN);
+            LocalDate today = LocalDate.now(clock.withZone(EUROPE_TALLINN));
             ZonedDateTime start = today.atStartOfDay(EUROPE_TALLINN);
             ZonedDateTime end = start.plusDays(2);
 
@@ -85,8 +91,15 @@ public class NordpoolPriceService {
         }
     }
 
+    /**
+     * Price of the 15-minute slot that contains the current moment.
+     * Returns empty when the latest stored price is older than one slot
+     * (e.g. Elering fetch failed), so callers never act on a stale price.
+     */
     public Optional<NordpoolPrice> getCurrentPrice() {
-        return priceRepository.findPriceAtTimestamp(ZonedDateTime.now());
+        ZonedDateTime now = ZonedDateTime.now(clock);
+        return priceRepository.findPriceAtTimestamp(now)
+                .filter(p -> p.getPriceTimestamp().isAfter(now.minus(SLOT_LENGTH)));
     }
 
     public Optional<NordpoolPrice> getPriceAt(ZonedDateTime timestamp) {
@@ -94,14 +107,14 @@ public class NordpoolPriceService {
     }
 
     public List<NordpoolPrice> getPricesForDate(LocalDate date) {
-        LocalDate targetDate = date != null ? date : LocalDate.now(EUROPE_TALLINN);
+        LocalDate targetDate = date != null ? date : LocalDate.now(clock.withZone(EUROPE_TALLINN));
         ZonedDateTime start = targetDate.atStartOfDay(EUROPE_TALLINN);
         ZonedDateTime end = start.plusDays(1).minusSeconds(1);
         return priceRepository.findByPriceTimestampBetweenOrderByPriceTimestampAsc(start, end);
     }
 
     public List<NordpoolPrice> getPricesForToday() {
-        ZonedDateTime startOfDay = ZonedDateTime.now(EUROPE_TALLINN).toLocalDate().atStartOfDay(EUROPE_TALLINN);
+        ZonedDateTime startOfDay = ZonedDateTime.now(clock.withZone(EUROPE_TALLINN)).toLocalDate().atStartOfDay(EUROPE_TALLINN);
         ZonedDateTime endOfDay = startOfDay.plusDays(1);
         return priceRepository.findByPriceTimestampBetweenOrderByPriceTimestampAsc(startOfDay, endOfDay);
     }
@@ -111,7 +124,7 @@ public class NordpoolPriceService {
     }
 
     public List<NordpoolPrice> getHourlyAveragePricesForDate(LocalDate date) {
-        LocalDate targetDate = date != null ? date : LocalDate.now(EUROPE_TALLINN);
+        LocalDate targetDate = date != null ? date : LocalDate.now(clock.withZone(EUROPE_TALLINN));
         ZonedDateTime start = targetDate.atStartOfDay(EUROPE_TALLINN);
         ZonedDateTime end = start.plusDays(1).minusSeconds(1);
         return getHourlyAveragePricesForDateRange(start, end);
@@ -131,19 +144,24 @@ public class NordpoolPriceService {
     }
 
     public Optional<BigDecimal> getCurrentHourAveragePrice() {
-        ZonedDateTime hourStart = ZonedDateTime.now(EUROPE_TALLINN).truncatedTo(ChronoUnit.HOURS);
+        ZonedDateTime hourStart = ZonedDateTime.now(clock.withZone(EUROPE_TALLINN)).truncatedTo(ChronoUnit.HOURS);
         return priceRepository.findAveragePriceBetween(hourStart, hourStart.plusHours(1));
     }
 
+    /**
+     * True when every 15-minute slot of the given Tallinn day is stored.
+     * A normal day has 96 slots; DST start has 92 (23 h) and DST end has 100 (25 h).
+     */
     public boolean hasPricesForDate(LocalDate date) {
         ZonedDateTime start = date.atStartOfDay(EUROPE_TALLINN);
-        ZonedDateTime end = start.plusDays(1).minusSeconds(1);
-        return priceRepository.countByPriceTimestampBetween(start, end) == 96;
+        ZonedDateTime nextDay = start.plusDays(1);
+        long expectedSlots = Duration.between(start, nextDay).dividedBy(SLOT_LENGTH);
+        return priceRepository.countByPriceTimestampBetween(start, nextDay.minusSeconds(1)) >= expectedSlots;
     }
 
     @Transactional
     public void cleanupOldPrices(int daysToKeep) {
-        ZonedDateTime cutoffDate = ZonedDateTime.now().minusDays(daysToKeep);
+        ZonedDateTime cutoffDate = ZonedDateTime.now(clock).minusDays(daysToKeep);
         priceRepository.deleteByPriceTimestampBefore(cutoffDate);
         log.info("Cleaned up Nordpool prices older than {} days", daysToKeep);
     }

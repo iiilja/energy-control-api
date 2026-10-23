@@ -10,16 +10,17 @@ Spring Boot 3.2 / Java 17 / Gradle 8.5 / PostgreSQL app for home energy control:
 
 ## Commands
 
-The Gradle wrapper is incomplete: only `gradlew.bat` and `gradle-wrapper.properties` are committed, with no `gradle-wrapper.jar` and no `gradlew` shell script. `gradle` is also not on PATH on this machine. Run `gradle wrapper` once with a locally installed Gradle 8.5, or build through Docker.
+The Gradle wrapper (Gradle 8.5) is committed: use `gradlew.bat` on Windows and `./gradlew` on Linux/macOS. No global `gradle` install is needed.
 
 ```bash
 docker-compose -f docker/docker-compose.yml up -d    # local PostgreSQL (energy_control / energy_user / energy_pass)
 gradlew.bat bootRun                                   # run app (needs the wrapper jar); add --args='--spring.profiles.active=dev'
 gradlew.bat build -x test                             # build jar (what the Dockerfiles do)
+gradlew.bat test                                      # all tests
 gradlew.bat test --tests 'com.ilja.smarthome.energycontrol.SomeTest'   # single test
 ```
 
-There are no tests yet (`src/test` doesn't exist). The Testcontainers dependencies are already in place for when tests are added.
+Unit tests live in `src/test` (JUnit 5 + Mockito, no Spring context): `HeatingSetpointServiceTest` and `NordpoolPriceServiceTest` cover date/time logic (Tallinn wall-clock, DST days with 92/100 slots, stale prices). Business code gets "now" from the `Clock` bean (`ClockConfig`), never `ZonedDateTime.now()` directly. Testcontainers dependencies are in place for repository tests.
 
 Docker images: `docker/Dockerfile` (amd64), `docker/Dockerfile.arm64` (production target: H96 Pro+ box), `docker/Dockerfile.armv7` (legacy). GitHub Actions builds the arm64 image and pushes it to `ghcr.io/iiilja/energy-control-api:latest` on every push to `main`, so merging to main deploys.
 

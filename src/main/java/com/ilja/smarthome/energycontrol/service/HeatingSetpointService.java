@@ -136,7 +136,9 @@ public class HeatingSetpointService {
         List<HeatingSetpointSchedule> schedules = new ArrayList<>();
 
         for (NordpoolPrice price : prices) {
-            LocalTime priceTime = price.getPriceTimestamp().toLocalTime();
+            // Timestamps loaded from the DB are not guaranteed to be in Tallinn time
+            // (PostgreSQL timestamptz comes back normalised, typically UTC).
+            LocalTime priceTime = price.getPriceTimestamp().withZoneSameInstant(EUROPE_TALLINN).toLocalTime();
             BigDecimal setpoint = findSetpointForTime(weeklyTemplate, priceTime);
 
             HeatingSetpointSchedule schedule = scheduleRepository.findByNordpoolPrice(price)
@@ -156,7 +158,8 @@ public class HeatingSetpointService {
         DefaultWeeklySchedule applicable = null;
 
         for (DefaultWeeklySchedule entry : template) {
-            if (time.isAfter(entry.getStartTime())) {
+            // An entry applies from its start time inclusive: the 05:00 entry covers the 05:00 slot.
+            if (!time.isBefore(entry.getStartTime())) {
                 applicable = entry;
             } else {
                 break;
