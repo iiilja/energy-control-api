@@ -72,6 +72,11 @@ dependencies {
     testImplementation 'org.testcontainers:junit-jupiter:1.19.3'
 }
 
+// Only the executable boot jar; the extra -plain.jar would also match COPY *.jar in the Dockerfiles
+tasks.named('jar') {
+    enabled = false
+}
+
 tasks.named('test') {
     useJUnitPlatform()
 }
