@@ -128,7 +128,18 @@ docker restart energy-control-api
 | `DB_PASSWORD` | `energy_pass` | Database password |
 | `SERVER_PORT` | `8080` | Application port |
 | `JAVA_OPTS` | `-Xms256m -Xmx512m` | JVM options |
-| `collection.interval.ms` | `60000` | Data collection interval |
+| `COLLECTION_INTERVAL_MS` | `60000` | Data collection interval (ms) |
+| `THERMIA_HOST` | `192.168.8.126` | Thermia heat pump IP address |
+| `THERMIA_PORT` | `502` | Thermia Modbus TCP port |
+| `THERMIA_SLAVE_ID` | `1` | Thermia Modbus unit ID |
+| `THERMIA_TIMEOUT_MS` | `5000` | Thermia Modbus timeout |
+| `SUNGROW_HOST` | `192.168.8.110` | Sungrow inverter IP address |
+| `SUNGROW_PORT` | `502` | Sungrow Modbus TCP port |
+| `SUNGROW_SLAVE_ID` | `1` | Sungrow Modbus unit ID |
+| `SUNGROW_TIMEOUT_MS` | `5000` | Sungrow Modbus timeout |
+| `SUNGROW_RATED_POWER_KW` | `15` | Inverter rated power |
+| `FEED_IN_PRICE_THRESHOLD_EUR_MWH` | `17.0` | Limit feed-in when Nordpool price is below this |
+| `FEED_IN_LIMIT_KW` | `3.0` | Feed-in limit applied below the price threshold |
 
 ### Runtime Configuration (database-driven)
 
@@ -136,9 +147,15 @@ Stored in the `system_configuration` table:
 
 | Key | Description |
 |-----|-------------|
-| `collection.enabled` | Enable/disable heat pump data collection (`true`/`false`) |
-| `thermia.host` | Thermia heat pump IP address |
-| `sungrow.host` | Sungrow inverter IP address |
+| `collection.enabled` | Enable/disable heat pump data collection (default `true`) |
+| `nordpool.fetch.enabled` | Enable/disable Nordpool price fetching (default `true`) |
+| `nordpool.cleanup.enabled` | Enable/disable daily cleanup of old prices (default `true`) |
+| `nordpool.cleanup.days_to_keep` | Days of price history to keep (default `30`) |
+| `heating.setpoint.adjustment.enabled` | Enable/disable hourly scheduled setpoint application (default `true`) |
+| `heating.setpoint.default` | Fallback comfort setpoint in °C (default `21.0`) |
+| `sungrow.feed_in_limit.enabled` | Enable/disable price-based Sungrow feed-in limit (default `false` if key missing) |
+
+Device hosts and ports are **not** stored in the database — set them via the environment variables above.
 
 To disable data collection:
 ```sql
@@ -198,15 +215,15 @@ All endpoints under `/api/v1/`. Full docs at `/swagger-ui.html`.
 ```
 src/main/java/com/ilja/smarthome/energycontrol/
 ├── EnergyControlApiApplication.java
-├── config/                        # Security, OpenAPI, Thermia config
+├── config/                        # Security, OpenAPI, RestClient, Thermia/Sungrow properties
 ├── domain/model/                  # JPA entities
 ├── repository/                    # Spring Data JPA repositories
-├── service/                       # DataCollectionService, ConfigurationService, NordpoolPriceService
-├── scheduler/                     # DataCollectionScheduler, NordpoolScheduler
+├── controller/                    # Nordpool price and heating setpoint REST controllers
+├── dto/                           # Elering, Nordpool and heating DTOs
+├── service/                       # DataCollection, Configuration, NordpoolPrice, EleringApiClient, HeatingSetpoint
+├── scheduler/                     # DataCollection, NordpoolPrice, HeatingSetpoint, SungrowFeedIn schedulers
 ├── thermia/                       # Thermia heat pump (client, service, controller, DTOs)
-├── sungrow/                       # Sungrow inverter (client, service, controller)
-├── nordpool/                      # Nordpool prices (service, controller)
-├── heating/                       # Heating schedules (service, controller)
+├── sungrow/                       # Sungrow inverter (client, service, controller, DTOs)
 └── exception/                     # Custom exceptions
 docker/
 ├── Dockerfile                     # Standard image (amd64) — run locally as before
@@ -229,7 +246,7 @@ ThermiaCommException: Cannot connect to Thermia heat pump
 
 1. Verify the heat pump is reachable: `ping <thermia_ip>`
 2. Test Modbus: `modpoll -t 3 -r 1 -c 1 -1 <thermia_ip>`
-3. Check `thermia.host` in `system_configuration` table
+3. Check the `THERMIA_HOST` / `THERMIA_PORT` environment variables (defaults in `application.yml`)
 
 ### Data not collecting
 
