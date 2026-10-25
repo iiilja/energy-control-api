@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -45,7 +46,7 @@ public class HeatingSetpointController {
     @Operation(summary = "Replace default weekly heating schedule template",
                description = "Deletes all existing weekly schedule entries and replaces them with the provided list")
     @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN')")
-    public ResponseEntity<Void> saveWeeklySchedule(@RequestBody List<WeeklyScheduleEntryRequest> entries) {
+    public ResponseEntity<Void> saveWeeklySchedule(@RequestBody List<@Valid WeeklyScheduleEntryRequest> entries) {
         log.info("Replacing weekly schedule with {} entries", entries.size());
         heatingSetpointService.saveWeeklySchedule(entries);
         return ResponseEntity.ok().build();
@@ -71,7 +72,7 @@ public class HeatingSetpointController {
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "List of setpoint schedules to save",
                     required = true)
-            @RequestBody List<SetpointScheduleItemRequest> schedules) {
+            @RequestBody List<@Valid SetpointScheduleItemRequest> schedules) {
         log.info("Saving {} heating setpoint schedules", schedules.size());
         heatingSetpointService.saveSchedules(schedules);
         return ResponseEntity.ok().build();

@@ -41,6 +41,8 @@ Prices are 15‑minute granularity in the DB. `NordpoolPriceService` derives hou
 
 **Persistence:** JPA runs with `ddl-auto: validate`, so every schema change needs a Flyway migration in `src/main/resources/db/migration`. Newer migrations use date-based versions (`V20260430_1__...sql`). Follow that scheme, and seed new feature-flag keys into `system_configuration` from a migration.
 
-**Security:** HTTP Basic with BCrypt, using users and roles from the DB (default `admin`/`admin` from V2). Access control is per endpoint via `@PreAuthorize` (`ROLE_READONLY` for reads, `ROLE_USER`/`ROLE_ADMIN` for writes, `ROLE_ADMIN` for admin operations), and `@EnableMethodSecurity` is on. `/actuator/health` and the Swagger paths are public. The OAuth2 authorization server dependency and tables exist but are not configured. There is no global `@ControllerAdvice` yet.
+**Security:** HTTP Basic with BCrypt, using users and roles from the DB (default `admin`/`admin` from V2). Access control is per endpoint via `@PreAuthorize` (`ROLE_READONLY` for reads, `ROLE_USER`/`ROLE_ADMIN` for writes, `ROLE_ADMIN` for admin operations), and `@EnableMethodSecurity` is on. `/actuator/health` and the Swagger paths are public. The OAuth2 authorization server dependency and tables exist but are not configured. `GlobalExceptionHandler` (`@RestControllerAdvice`) maps `IllegalArgumentException` to 400, Thermia/Sungrow communication errors to 503 and Elering errors to 502, as RFC 7807 problem details.
+
+**Write guards:** `ThermiaHeatPumpService` range-checks every register write (comfort setpoint 15–30 °C, operation mode 1–3, tap water start 30–60 / stop 30–65 with start < stop, heat curve 7 points 15–65 °C) and throws `IllegalArgumentException` before touching Modbus. Keep the DTO constraints and these checks in sync, because schedulers bypass the DTOs.
 
 Swagger UI: `http://localhost:8080/swagger-ui.html`. All API routes are under `/api/v1/{thermia,sungrow,nordpool,heating}`.

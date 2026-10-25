@@ -85,6 +85,18 @@ public class ThermiaHeatPumpService {
     // Discrete inputs (FC02) — 0-based
     private static final int DISCRETE_ALARM_A          = 0;
 
+    // Allowed ranges for writes (Thermia Modbus protocol). Checked before anything is sent,
+    // so neither the API nor a scheduler can push an out-of-range value into the heat pump.
+    static final double COMFORT_SETPOINT_MIN = 15.0;
+    static final double COMFORT_SETPOINT_MAX = 30.0;
+    static final double TAP_WATER_START_MIN  = 30.0;
+    static final double TAP_WATER_START_MAX  = 60.0;
+    static final double TAP_WATER_STOP_MIN   = 30.0;
+    static final double TAP_WATER_STOP_MAX   = 65.0;
+    static final double HEAT_CURVE_MIN       = 15.0;
+    static final double HEAT_CURVE_MAX       = 65.0;
+    static final int    HEAT_CURVE_POINTS    = 7;
+
     // Millis between Modbus read batches (matches Arduino MODBUS_TRANSACTION_DELAY)
     private static final int BATCH_DELAY_MS = 50;
 
@@ -188,12 +200,16 @@ public class ThermiaHeatPumpService {
 
     /** Set heat pump operation mode: 1=OFF, 2=Standby, 3=ON/Auto. */
     public void setOperationMode(int mode) {
+        if (mode < 1 || mode > 3) {
+            throw new IllegalArgumentException("Operation mode must be 1 (OFF), 2 (Standby) or 3 (ON/Auto), got: " + mode);
+        }
         log.info("Setting operation mode to {}", mode);
         modbusClient.writeHoldingRegister(REG_OPERATION_MODE, mode);
     }
 
     /** Set comfort wheel (desired indoor temperature), 15–30 °C. */
     public void setComfortSetpoint(double celsius) {
+        requireInRange("Comfort setpoint", celsius, COMFORT_SETPOINT_MIN, COMFORT_SETPOINT_MAX);
         int raw = (int) Math.round(celsius * 100);
         log.info("Setting comfort setpoint to {} °C (raw {})", celsius, raw);
         modbusClient.writeHoldingRegister(REG_COMFORT_SETPOINT, raw);
@@ -201,6 +217,12 @@ public class ThermiaHeatPumpService {
 
     /** Set tap water start and stop temperatures. */
     public void setTapWaterTemperatures(double startCelsius, double stopCelsius) {
+        requireInRange("Tap water start temperature", startCelsius, TAP_WATER_START_MIN, TAP_WATER_START_MAX);
+        requireInRange("Tap water stop temperature", stopCelsius, TAP_WATER_STOP_MIN, TAP_WATER_STOP_MAX);
+        if (startCelsius >= stopCelsius) {
+            throw new IllegalArgumentException("Tap water start temperature (" + startCelsius
+                    + " °C) must be below stop temperature (" + stopCelsius + " °C)");
+        }
         log.info("Setting tap water temperatures: start={} °C, stop={} °C", startCelsius, stopCelsius);
         modbusClient.writeHoldingRegister(REG_TAP_WATER_START_TEMP, (int) Math.round(startCelsius * 100));
         modbusClient.writeHoldingRegister(REG_TAP_WATER_STOP_TEMP,  (int) Math.round(stopCelsius  * 100));
@@ -208,6 +230,14 @@ public class ThermiaHeatPumpService {
 
     /** Set all 7 heat curve Y-axis (supply temperature) points, 15–65 °C each. */
     public void setHeatCurveY(double[] points) {
+        if (points == null || points.length != HEAT_CURVE_POINTS) {
+            throw new IllegalArgumentException("Heat curve must have exactly " + HEAT_CURVE_POINTS + " points, got: "
+                    + (points == null ? "null" : points.length));
+        }
+        // Validate all points before writing any, so the curve is never left half-updated
+        for (int i = 0; i < points.length; i++) {
+            requireInRange("Heat curve point " + (i + 1), points[i], HEAT_CURVE_MIN, HEAT_CURVE_MAX);
+        }
         log.info("Setting heat curve Y points: {}", points);
         for (int i = 0; i < 7; i++) {
             modbusClient.writeHoldingRegister(REG_HEAT_CURVE_Y_START + i, (int) Math.round(points[i] * 100));
@@ -420,6 +450,13 @@ public class ThermiaHeatPumpService {
     /** Combine two consecutive 16-bit registers into a 32-bit value (MSB first). */
     private static long to32bit(int msb, int lsb) {
         return ((long) msb << 16) | (lsb & 0xFFFFL);
+    }
+
+    private static void requireInRange(String name, double value, double min, double max) {
+        // Written as !(in range) so that NaN is rejected too
+        if (!(value >= min && value <= max)) {
+            throw new IllegalArgumentException(name + " must be between " + min + " and " + max + " °C, got: " + value);
+        }
     }
 
     private static void sleep(int ms) {
