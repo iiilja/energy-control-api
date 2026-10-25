@@ -108,12 +108,15 @@ docker run -d \
   ghcr.io/iiilja/energy-control-api:latest
 ```
 
-To deploy an update:
+To deploy an update, run [`docker/h96/update-energy-api.sh`](docker/h96/update-energy-api.sh) on the box
+(copy it to `~/update-energy-api.sh`, `chmod +x`, run with `./update-energy-api.sh`).
+It pulls with a timeout and retries, recreates the container, waits for the healthcheck and logs every step
+to `~/update-energy-api.log`.
 
-```bash
-docker pull ghcr.io/iiilja/energy-control-api:latest
-docker restart energy-control-api
-```
+`docker restart` is **not** enough: it keeps the old image, entrypoint and environment.
+The container has to be removed and created again (`docker rm -f` + `docker run`), which the script does.
+
+Heap size is set with `-e JAVA_OPTS="-Xms256m -Xmx512m"` (the image default).
 
 ## Configuration
 

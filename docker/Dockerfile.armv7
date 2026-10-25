@@ -40,9 +40,8 @@ RUN groupadd -r spring && useradd -r -g spring spring
 
 RUN mkdir -p /app/logs && chown spring:spring /app/logs
 
-COPY --from=build /app/build/libs/*.jar app.jar
-
-RUN chown spring:spring app.jar
+# --chown in COPY: a separate `RUN chown` would duplicate the whole jar in a new layer
+COPY --from=build --chown=spring:spring /app/build/libs/*.jar app.jar
 
 USER spring:spring
 
@@ -51,4 +50,9 @@ EXPOSE 8080
 # Reduced heap for 1 GB device — leaves room for PostgreSQL and OS
 ENV JAVA_OPTS="-Xms128m -Xmx384m"
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# Shell form so JAVA_OPTS is expanded; exec keeps java as PID 1 to receive SIGTERM (graceful shutdown).
+# "$@" passes `docker run <image> <args>` through to the app.
+# JAVA_OPTS is split on spaces without quote handling: use it for plain flags (-Xmx512m),
+# put quoted values (-Dfoo="a b") into JAVA_TOOL_OPTIONS instead.
+# JAVA_OPTS is on the command line, so its -Xmx wins over -Xmx from JAVA_TOOL_OPTIONS.
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar \"$@\"", "--"]

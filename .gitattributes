@@ -1,0 +1,4 @@
+# Line endings (Gradle template): Windows scripts CRLF, shell scripts LF
+*.bat text eol=crlf
+gradlew text eol=lf
+*.sh text eol=lf

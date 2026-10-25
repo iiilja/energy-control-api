@@ -34,10 +34,8 @@ RUN addgroup -S spring && adduser -S spring -G spring
 RUN mkdir -p /app/logs && chown spring:spring /app/logs
 
 # Copy the built JAR from build stage
-COPY --from=build /app/build/libs/*.jar app.jar
-
-# Change ownership to non-root user
-RUN chown spring:spring app.jar
+# --chown in COPY: a separate `RUN chown` would duplicate the whole jar in a new layer
+COPY --from=build --chown=spring:spring /app/build/libs/*.jar app.jar
 
 # Switch to non-root user
 USER spring:spring
@@ -50,7 +48,12 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
 
 # Run the application
-ENTRYPOINT ["java", "-jar", "app.jar"]
-
-# Default JVM options (can be overridden)
+# Default JVM options, override with -e JAVA_OPTS=...
 ENV JAVA_OPTS="-Xms256m -Xmx512m"
+
+# Shell form so JAVA_OPTS is expanded; exec keeps java as PID 1 to receive SIGTERM (graceful shutdown).
+# "$@" passes `docker run <image> <args>` through to the app.
+# JAVA_OPTS is split on spaces without quote handling: use it for plain flags (-Xmx512m),
+# put quoted values (-Dfoo="a b") into JAVA_TOOL_OPTIONS instead.
+# JAVA_OPTS is on the command line, so its -Xmx wins over -Xmx from JAVA_TOOL_OPTIONS.
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar \"$@\"", "--"]
