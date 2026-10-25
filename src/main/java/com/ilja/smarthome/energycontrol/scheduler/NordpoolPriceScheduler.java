@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
@@ -21,15 +22,18 @@ public class NordpoolPriceScheduler {
     private final NordpoolPriceService nordpoolPriceService;
     private final HeatingSetpointService heatingSetpointService;
     private final ConfigurationService configService;
+    private final Clock clock;
 
     @Autowired
     public NordpoolPriceScheduler(
             NordpoolPriceService nordpoolPriceService,
             HeatingSetpointService heatingSetpointService,
-            ConfigurationService configService) {
+            ConfigurationService configService,
+            Clock clock) {
         this.nordpoolPriceService = nordpoolPriceService;
         this.heatingSetpointService = heatingSetpointService;
         this.configService = configService;
+        this.clock = clock;
     }
 
     @Scheduled(cron = "${nordpool.fetch.cron:0 0 14-23 * * *}", zone = "Europe/Tallinn")
@@ -44,7 +48,7 @@ public class NordpoolPriceScheduler {
         }
 
         try {
-            LocalDate tomorrow = LocalDate.now(EUROPE_TALLINN).plusDays(1);
+            LocalDate tomorrow = LocalDate.now(clock.withZone(EUROPE_TALLINN)).plusDays(1);
             if (nordpoolPriceService.hasPricesForDate(tomorrow)) {
                 log.debug("Nordpool prices for {} already stored, skipping fetch", tomorrow);
                 return;

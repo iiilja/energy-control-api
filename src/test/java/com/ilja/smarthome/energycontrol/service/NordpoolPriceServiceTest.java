@@ -17,12 +17,14 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -37,9 +39,13 @@ class NordpoolPriceServiceTest {
     @Mock private EleringApiClientService eleringClient;
     @Mock private NordpoolPriceRepository priceRepository;
 
+    /**
+     * The clock is deliberately in UTC (like the JVM in Docker), so the tests catch code that
+     * relies on the clock's zone instead of converting to Europe/Tallinn explicitly.
+     */
     private NordpoolPriceService serviceAt(String instant) {
         return new NordpoolPriceService(eleringClient, priceRepository,
-                Clock.fixed(Instant.parse(instant), TALLINN));
+                Clock.fixed(Instant.parse(instant), ZoneOffset.UTC));
     }
 
     @Nested
@@ -56,7 +62,7 @@ class NordpoolPriceServiceTest {
                 "2026-03-29,  91, false",
         })
         void comparesWithSlotsInThatTallinnDay(LocalDate date, long stored, boolean expected) {
-            when(priceRepository.countByPriceTimestampBetween(any(), any())).thenReturn(stored);
+            when(priceRepository.countInPeriod(any(), any())).thenReturn(stored);
 
             assertThat(serviceAt("2026-10-23T09:00:00Z").hasPricesForDate(date)).isEqualTo(expected);
         }
@@ -74,6 +80,11 @@ class NordpoolPriceServiceTest {
             when(priceRepository.findPriceAtTimestamp(any())).thenReturn(Optional.of(slot));
 
             assertThat(serviceAt("2026-10-23T09:07:00Z").getCurrentPrice()).contains(slot);
+
+            // the repository is asked for the latest price at the current instant
+            ArgumentCaptor<ZonedDateTime> at = ArgumentCaptor.forClass(ZonedDateTime.class);
+            verify(priceRepository).findPriceAtTimestamp(at.capture());
+            assertThat(at.getValue().toInstant()).isEqualTo(Instant.parse("2026-10-23T09:07:00Z"));
         }
 
         @Test
@@ -112,14 +123,16 @@ class NordpoolPriceServiceTest {
         @DisplayName("just after Tallinn midnight (still yesterday in UTC) uses the Tallinn date")
         void usesTallinnDateNotUtc() {
             ArgumentCaptor<ZonedDateTime> start = ArgumentCaptor.forClass(ZonedDateTime.class);
-            when(priceRepository.findByPriceTimestampBetweenOrderByPriceTimestampAsc(start.capture(), any()))
-                    .thenReturn(List.of());
+            ArgumentCaptor<ZonedDateTime> end = ArgumentCaptor.forClass(ZonedDateTime.class);
+            when(priceRepository.findInPeriod(start.capture(), end.capture())).thenReturn(List.of());
 
             // 2026-10-23T22:30Z = 2026-10-24 01:30 in Tallinn
             serviceAt("2026-10-23T22:30:00Z").getPricesForDate(null);
 
             assertThat(start.getValue().toLocalDate()).isEqualTo(LocalDate.of(2026, 10, 24));
             assertThat(start.getValue().toLocalTime()).hasToString("00:00");
+            // half-open day: ends exactly at the next Tallinn midnight (exclusive in the query)
+            assertThat(end.getValue().toInstant()).isEqualTo(Instant.parse("2026-10-24T21:00:00Z"));
         }
     }
 

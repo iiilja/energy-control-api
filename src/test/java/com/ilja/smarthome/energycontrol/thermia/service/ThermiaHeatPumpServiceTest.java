@@ -1,5 +1,6 @@
 package com.ilja.smarthome.energycontrol.thermia.service;
 
+import com.ilja.smarthome.energycontrol.exception.InvalidValueException;
 import com.ilja.smarthome.energycontrol.thermia.client.ThermiaModbusClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -56,7 +57,7 @@ class ThermiaHeatPumpServiceTest {
         @ValueSource(doubles = {14.99, 30.01, 0.0, -5.0, 50.0, Double.NaN, Double.POSITIVE_INFINITY})
         void rejectsOutOfRangeWithoutTouchingThePump(double celsius) {
             assertThatThrownBy(() -> service.setComfortSetpoint(celsius))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(InvalidValueException.class)
                     .hasMessageContaining("Comfort setpoint");
 
             verifyNoInteractions(modbusClient);
@@ -78,7 +79,7 @@ class ThermiaHeatPumpServiceTest {
         @ParameterizedTest(name = "mode {0} is rejected")
         @ValueSource(ints = {0, 4, -1, 100})
         void rejectsUnknownMode(int mode) {
-            assertThatThrownBy(() -> service.setOperationMode(mode)).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> service.setOperationMode(mode)).isInstanceOf(InvalidValueException.class);
 
             verifyNoInteractions(modbusClient);
         }
@@ -100,14 +101,14 @@ class ThermiaHeatPumpServiceTest {
         @Test
         void rejectsStartAboveRange() {
             assertThatThrownBy(() -> service.setTapWaterTemperatures(61.0, 65.0))
-                    .isInstanceOf(IllegalArgumentException.class);
+                    .isInstanceOf(InvalidValueException.class);
             verifyNoInteractions(modbusClient);
         }
 
         @Test
         void rejectsStopAboveRange() {
             assertThatThrownBy(() -> service.setTapWaterTemperatures(45.0, 66.0))
-                    .isInstanceOf(IllegalArgumentException.class);
+                    .isInstanceOf(InvalidValueException.class);
             verifyNoInteractions(modbusClient);
         }
 
@@ -115,7 +116,7 @@ class ThermiaHeatPumpServiceTest {
         @DisplayName("start must be below stop, otherwise DHW would short-cycle")
         void rejectsStartNotBelowStop() {
             assertThatThrownBy(() -> service.setTapWaterTemperatures(50.0, 50.0))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(InvalidValueException.class)
                     .hasMessageContaining("below stop");
             verifyNoInteractions(modbusClient);
         }
@@ -137,10 +138,10 @@ class ThermiaHeatPumpServiceTest {
         @Test
         void rejectsWrongNumberOfPoints() {
             assertThatThrownBy(() -> service.setHeatCurveY(new double[]{20, 25, 30}))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(InvalidValueException.class)
                     .hasMessageContaining("exactly 7");
             assertThatThrownBy(() -> service.setHeatCurveY(null))
-                    .isInstanceOf(IllegalArgumentException.class);
+                    .isInstanceOf(InvalidValueException.class);
             verifyNoInteractions(modbusClient);
         }
 
@@ -148,7 +149,7 @@ class ThermiaHeatPumpServiceTest {
         @DisplayName("one bad point rejects the whole curve — nothing is written half-way")
         void rejectsWholeCurveIfOnePointIsOutOfRange() {
             assertThatThrownBy(() -> service.setHeatCurveY(new double[]{20, 25, 30, 35, 40, 45, 70}))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(InvalidValueException.class)
                     .hasMessageContaining("point 7");
             verifyNoInteractions(modbusClient);
         }

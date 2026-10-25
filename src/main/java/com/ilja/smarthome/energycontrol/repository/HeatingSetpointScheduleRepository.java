@@ -19,15 +19,16 @@ public interface HeatingSetpointScheduleRepository extends JpaRepository<Heating
     List<HeatingSetpointSchedule> findByAppliedFalse();
 
     @Query("SELECT s FROM HeatingSetpointSchedule s " +
-           "JOIN s.nordpoolPrice p " +
+           "JOIN FETCH s.nordpoolPrice p " +
            "WHERE p.priceTimestamp <= :timestamp AND s.applied = false " +
            "ORDER BY p.priceTimestamp DESC LIMIT 1")
     Optional<HeatingSetpointSchedule> findNextPendingSchedule(@Param("timestamp") ZonedDateTime timestamp);
 
+    /** Schedules whose price slot lies in the half-open period [start, end). */
     @Query("SELECT s FROM HeatingSetpointSchedule s " +
            "JOIN s.nordpoolPrice p " +
-           "WHERE p.priceTimestamp BETWEEN :start AND :end")
-    List<HeatingSetpointSchedule> findByPriceTimestampBetween(
+           "WHERE p.priceTimestamp >= :start AND p.priceTimestamp < :end")
+    List<HeatingSetpointSchedule> findInPeriod(
             @Param("start") ZonedDateTime start,
             @Param("end") ZonedDateTime end
     );

@@ -3,6 +3,9 @@ package com.ilja.smarthome.energycontrol.service;
 import com.ilja.smarthome.energycontrol.domain.model.DefaultWeeklySchedule;
 import com.ilja.smarthome.energycontrol.domain.model.HeatingSetpointSchedule;
 import com.ilja.smarthome.energycontrol.domain.model.NordpoolPrice;
+import com.ilja.smarthome.energycontrol.dto.heating.SetpointScheduleItemRequest;
+import com.ilja.smarthome.energycontrol.dto.heating.WeeklyScheduleEntryRequest;
+import com.ilja.smarthome.energycontrol.exception.InvalidValueException;
 import com.ilja.smarthome.energycontrol.repository.DefaultWeeklyScheduleRepository;
 import com.ilja.smarthome.energycontrol.repository.HeatingSetpointScheduleRepository;
 import com.ilja.smarthome.energycontrol.repository.NordpoolPriceRepository;
@@ -12,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -26,9 +30,12 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -147,18 +154,59 @@ class HeatingSetpointServiceTest {
     }
 
     @Test
-    @DisplayName("Prices are queried for the Tallinn day [00:00, next 00:00)")
+    @DisplayName("Prices are queried for the Tallinn day [00:00, next 00:00) via the half-open findInPeriod")
     void queriesTallinnDayBounds() {
         LocalDate day = LocalDate.of(2026, 10, 25);
         ArgumentCaptor<ZonedDateTime> start = ArgumentCaptor.forClass(ZonedDateTime.class);
         ArgumentCaptor<ZonedDateTime> end = ArgumentCaptor.forClass(ZonedDateTime.class);
-        when(nordpoolPriceRepository.findByPriceTimestampBetweenOrderByPriceTimestampAsc(start.capture(), end.capture()))
+        when(nordpoolPriceRepository.findInPeriod(start.capture(), end.capture()))
                 .thenReturn(List.of());
 
         service.applyWeeklyTemplateToDate(day);
 
         assertThat(start.getValue().toInstant()).isEqualTo(ZonedDateTime.parse("2026-10-24T21:00:00Z").toInstant());
         assertThat(end.getValue().toInstant()).isEqualTo(ZonedDateTime.parse("2026-10-25T22:00:00Z").toInstant());
+    }
+
+    @Test
+    @DisplayName("Weekly template: duplicate day + time ('05:00' vs '05:00:00') is rejected before anything is deleted")
+    void weeklyTemplateRejectsDuplicates() {
+        List<WeeklyScheduleEntryRequest> entries = List.of(
+                new WeeklyScheduleEntryRequest((short) 1, "05:00", new BigDecimal("22.0")),
+                new WeeklyScheduleEntryRequest((short) 1, "05:00:00", new BigDecimal("21.0")));
+
+        assertThatThrownBy(() -> service.saveWeeklySchedule(entries))
+                .isInstanceOf(InvalidValueException.class)
+                .hasMessageContaining("day 1 at 05:00");
+
+        verify(weeklyScheduleRepository, never()).deleteAllInBatch();
+        verify(weeklyScheduleRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    @DisplayName("Weekly template: old rows are bulk-deleted before the new ones are inserted")
+    void weeklyTemplateDeletesInBatchThenSaves() {
+        List<WeeklyScheduleEntryRequest> entries = List.of(
+                new WeeklyScheduleEntryRequest((short) 1, "05:00", new BigDecimal("22.0")),
+                new WeeklyScheduleEntryRequest((short) 2, "05:00", new BigDecimal("22.0")));
+
+        service.saveWeeklySchedule(entries);
+
+        InOrder order = inOrder(weeklyScheduleRepository);
+        order.verify(weeklyScheduleRepository).deleteAllInBatch();
+        order.verify(weeklyScheduleRepository).saveAll(anyList());
+        verify(weeklyScheduleRepository, never()).deleteAll();
+    }
+
+    @Test
+    @DisplayName("Saving a setpoint for an unknown price id is an InvalidValueException (HTTP 400)")
+    void unknownPriceIdIsInvalidValue() {
+        when(nordpoolPriceRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.saveSchedules(
+                List.of(new SetpointScheduleItemRequest(999L, new BigDecimal("21.0")))))
+                .isInstanceOf(InvalidValueException.class)
+                .hasMessageContaining("999");
     }
 
     // ------------------------------------------------------------------------
@@ -172,7 +220,7 @@ class HeatingSetpointServiceTest {
             prices.add(new NordpoolPrice(slot.withZoneSameInstant(storageZone), new BigDecimal("50.0")));
             slot = slot.plusMinutes(15);
         }
-        when(nordpoolPriceRepository.findByPriceTimestampBetweenOrderByPriceTimestampAsc(any(), any()))
+        when(nordpoolPriceRepository.findInPeriod(any(), any()))
                 .thenReturn(prices);
     }
 

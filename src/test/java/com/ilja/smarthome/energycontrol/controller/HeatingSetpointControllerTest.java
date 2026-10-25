@@ -1,6 +1,7 @@
 package com.ilja.smarthome.energycontrol.controller;
 
 import com.ilja.smarthome.energycontrol.config.SecurityConfig;
+import com.ilja.smarthome.energycontrol.exception.InvalidValueException;
 import com.ilja.smarthome.energycontrol.repository.UserRepository;
 import com.ilja.smarthome.energycontrol.service.HeatingSetpointService;
 import org.junit.jupiter.api.DisplayName;
@@ -17,6 +18,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.never;
@@ -91,11 +93,31 @@ class HeatingSetpointControllerTest {
         @WithMockUser(roles = "USER")
         void unknownPriceIdIsBadRequest() throws Exception {
             when(service.saveSchedules(anyList()))
-                    .thenThrow(new IllegalArgumentException("Nordpool price not found: 999"));
+                    .thenThrow(new InvalidValueException("Nordpool price not found: 999"));
 
             postSchedule("[{\"nordpoolPriceId\": 999, \"setpoint\": 21.0}]")
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.detail").value("Nordpool price not found: 999"));
+        }
+
+        @Test
+        @DisplayName("a null item in the list -> 400, not a NullPointerException")
+        @WithMockUser(roles = "USER")
+        void rejectsNullItem() throws Exception {
+            postSchedule("[null]").andExpect(status().isBadRequest());
+
+            verify(service, never()).saveSchedules(anyList());
+        }
+
+        @Test
+        @DisplayName("a plain IllegalArgumentException (e.g. broken config number) is NOT turned into 400")
+        @WithMockUser(roles = "USER")
+        void serverSideIllegalArgumentIsNotBadRequest() {
+            when(service.saveSchedules(anyList())).thenThrow(new NumberFormatException("For input string: \"abc\""));
+
+            // no handler matches, so MockMvc rethrows it (in a running server this becomes 500)
+            assertThatThrownBy(() -> postSchedule("[{\"nordpoolPriceId\": 1, \"setpoint\": 21.0}]"))
+                    .hasRootCauseInstanceOf(NumberFormatException.class);
         }
 
         @Test
@@ -140,6 +162,23 @@ class HeatingSetpointControllerTest {
         @WithMockUser(roles = "USER")
         void rejectsInvalidEntry(String entry) throws Exception {
             putWeekly("[" + entry + "]").andExpect(status().isBadRequest());
+
+            verify(service, never()).saveWeeklySchedule(anyList());
+        }
+
+        @Test
+        @DisplayName("an empty list would wipe the whole template -> 400")
+        @WithMockUser(roles = "USER")
+        void rejectsEmptyList() throws Exception {
+            putWeekly("[]").andExpect(status().isBadRequest());
+
+            verify(service, never()).saveWeeklySchedule(anyList());
+        }
+
+        @Test
+        @WithMockUser(roles = "USER")
+        void rejectsNullItem() throws Exception {
+            putWeekly("[null]").andExpect(status().isBadRequest());
 
             verify(service, never()).saveWeeklySchedule(anyList());
         }

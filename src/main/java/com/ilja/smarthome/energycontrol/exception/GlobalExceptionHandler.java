@@ -20,9 +20,13 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    /** Invalid input that passed DTO validation but was rejected by a service (range checks, unknown ids). */
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ProblemDetail handleIllegalArgument(IllegalArgumentException e) {
+    /**
+     * Invalid input that passed DTO validation but was rejected by a service (range checks, unknown ids,
+     * duplicates). Deliberately not every IllegalArgumentException: e.g. a NumberFormatException from a
+     * broken config value is a server error and must stay 500.
+     */
+    @ExceptionHandler(InvalidValueException.class)
+    public ProblemDetail handleInvalidValue(InvalidValueException e) {
         log.warn("Rejected request: {}", e.getMessage());
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
     }
