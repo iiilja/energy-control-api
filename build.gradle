@@ -8,7 +8,11 @@ group = 'com.ilja.smarthome'
 version = '1.0.0-SNAPSHOT'
 
 java {
-    sourceCompatibility = '17'
+    // Compile and run tests on JDK 17 (same as the Docker images), whatever JDK runs Gradle.
+    // Missing JDKs are downloaded automatically (foojay resolver in settings.gradle).
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
 }
 
 configurations {

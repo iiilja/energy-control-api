@@ -22,7 +22,7 @@ gradlew.bat test --tests 'com.ilja.smarthome.energycontrol.SomeTest'   # single 
 
 Unit tests live in `src/test` (JUnit 5 + Mockito, no Spring context): `HeatingSetpointServiceTest` and `NordpoolPriceServiceTest` cover date/time logic (Tallinn wall-clock, DST days with 92/100 slots, stale prices). Business code gets "now" from the `Clock` bean (`ClockConfig`), never `ZonedDateTime.now()` directly. Testcontainers dependencies are in place for repository tests.
 
-Docker images: `docker/Dockerfile` (amd64), `docker/Dockerfile.arm64` (production target: H96 Pro+ box), `docker/Dockerfile.armv7` (legacy). GitHub Actions builds the arm64 image and pushes it to `ghcr.io/iiilja/energy-control-api:latest` on every push to `main`, so merging to main deploys.
+Docker images: `docker/Dockerfile` (amd64), `docker/Dockerfile.arm64` (production target: H96 Pro+ box), `docker/Dockerfile.armv7` (legacy). GitHub Actions (`build-arm64.yml`) runs `./gradlew test` on every pull request and push to `main`. On a push to `main` with green tests it builds the arm64 image and pushes it to `ghcr.io/iiilja/energy-control-api:latest`, so merging to main deploys. The build compiles with a JDK 17 toolchain (`build.gradle`), and foojay downloads it if missing.
 
 ## Architecture
 
