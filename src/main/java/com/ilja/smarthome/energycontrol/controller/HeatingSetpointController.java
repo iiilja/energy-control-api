@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -26,6 +27,7 @@ import java.util.Map;
 @Tag(name = "Heating Setpoint", description = "Manage heating setpoint schedules based on electricity prices")
 @SecurityRequirement(name = "basicAuth")
 @Slf4j
+@Validated
 public class HeatingSetpointController {
 
     private final HeatingSetpointService heatingSetpointService;

@@ -17,6 +17,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -60,7 +61,8 @@ class HeatingSetpointControllerTest {
         @WithMockUser(roles = "USER")
         void rejectsOutOfRangeSetpoint(String setpoint) throws Exception {
             postSchedule("[{\"nordpoolPriceId\": 1, \"setpoint\": " + setpoint + "}]")
-                    .andExpect(status().isBadRequest());
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.detail").value(containsString("setpoint")));
 
             verify(service, never()).saveSchedules(anyList());
         }
