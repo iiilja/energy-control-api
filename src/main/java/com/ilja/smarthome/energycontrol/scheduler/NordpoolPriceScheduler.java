@@ -2,7 +2,6 @@ package com.ilja.smarthome.energycontrol.scheduler;
 
 import com.ilja.smarthome.energycontrol.exception.EleringApiException;
 import com.ilja.smarthome.energycontrol.service.ConfigurationService;
-import com.ilja.smarthome.energycontrol.service.HeatingSetpointService;
 import com.ilja.smarthome.energycontrol.service.NordpoolPriceService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,18 +19,15 @@ public class NordpoolPriceScheduler {
     private static final ZoneId EUROPE_TALLINN = ZoneId.of("Europe/Tallinn");
 
     private final NordpoolPriceService nordpoolPriceService;
-    private final HeatingSetpointService heatingSetpointService;
     private final ConfigurationService configService;
     private final Clock clock;
 
     @Autowired
     public NordpoolPriceScheduler(
             NordpoolPriceService nordpoolPriceService,
-            HeatingSetpointService heatingSetpointService,
             ConfigurationService configService,
             Clock clock) {
         this.nordpoolPriceService = nordpoolPriceService;
-        this.heatingSetpointService = heatingSetpointService;
         this.configService = configService;
         this.clock = clock;
     }
@@ -58,11 +54,6 @@ public class NordpoolPriceScheduler {
             int pricesStored = nordpoolPriceService.fetchAndStorePrices();
             log.info("Scheduled Nordpool price fetch completed. Stored {} new price entries", pricesStored);
 
-            if (pricesStored > 0) {
-                log.info("Applying weekly template to tomorrow's date: {}", tomorrow);
-                int schedulesCreated = heatingSetpointService.applyWeeklyTemplateToDate(tomorrow);
-                log.info("Applied weekly template. Created {} heating setpoint schedules for {}", schedulesCreated, tomorrow);
-            }
 
         } catch (EleringApiException e) {
             log.warn("Elering API communication failed during scheduled fetch: {}", e.getMessage());

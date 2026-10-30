@@ -13,10 +13,12 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * Write guards of {@link ThermiaHeatPumpService}: out-of-range values must be rejected
@@ -51,6 +53,14 @@ class ThermiaHeatPumpServiceTest {
             service.setComfortSetpoint(celsius);
 
             verify(modbusClient).writeHoldingRegister(REG_COMFORT_SETPOINT, (int) Math.round(celsius * 100));
+        }
+
+        @Test
+        @DisplayName("reads the comfort setpoint from holding register 6, /100")
+        void readsSetpoint() {
+            when(modbusClient.readHoldingRegisters(REG_COMFORT_SETPOINT, 1)).thenReturn(new int[]{2150});
+
+            assertThat(service.getComfortSetpoint()).isEqualTo(21.5);
         }
 
         @ParameterizedTest(name = "{0} °C is rejected")

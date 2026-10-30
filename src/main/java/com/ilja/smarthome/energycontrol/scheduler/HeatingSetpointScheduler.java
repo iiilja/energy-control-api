@@ -1,99 +1,43 @@
 package com.ilja.smarthome.energycontrol.scheduler;
 
-import com.ilja.smarthome.energycontrol.domain.model.HeatingSetpointSchedule;
-import com.ilja.smarthome.energycontrol.exception.InvalidValueException;
-import com.ilja.smarthome.energycontrol.thermia.exception.ThermiaCommException;
-import com.ilja.smarthome.energycontrol.thermia.service.ThermiaHeatPumpService;
-import com.ilja.smarthome.energycontrol.repository.HeatingSetpointScheduleRepository;
 import com.ilja.smarthome.energycontrol.service.ConfigurationService;
-import com.ilja.smarthome.energycontrol.service.HeatingSetpointService;
+import com.ilja.smarthome.energycontrol.service.HeatingControlService;
+import com.ilja.smarthome.energycontrol.thermia.exception.ThermiaCommException;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
-import java.time.Clock;
-import java.time.ZonedDateTime;
-import java.time.temporal.ChronoUnit;
-import java.util.Optional;
-
+/**
+ * Runs the heating control loop every 15 minutes (15 s after each slot boundary, so the new
+ * price slot has started). See {@link HeatingControlService#reconcile()}.
+ */
 @Component
 @Slf4j
 public class HeatingSetpointScheduler {
-    private final ThermiaHeatPumpService thermiaService;
-    private final HeatingSetpointService heatingSetpointService;
-    private final ConfigurationService configService;
-    private final HeatingSetpointScheduleRepository scheduleRepository;
-    private final Clock clock;
 
-    @Autowired
-    public HeatingSetpointScheduler(
-            ThermiaHeatPumpService thermiaService,
-            HeatingSetpointService heatingSetpointService,
-            ConfigurationService configService,
-            HeatingSetpointScheduleRepository scheduleRepository,
-            Clock clock) {
-        this.thermiaService = thermiaService;
-        this.heatingSetpointService = heatingSetpointService;
+    private final HeatingControlService heatingControlService;
+    private final ConfigurationService configService;
+
+    public HeatingSetpointScheduler(HeatingControlService heatingControlService, ConfigurationService configService) {
+        this.heatingControlService = heatingControlService;
         this.configService = configService;
-        this.scheduleRepository = scheduleRepository;
-        this.clock = clock;
     }
 
-    @Scheduled(cron = "${heating.setpoint.adjustment.cron:0 0 * * * *}")
-    public void applyHourlySetpoint() {
+    @Scheduled(cron = "${heating.setpoint.adjustment.cron:15 0/15 * * * *}")
+    public void controlSetpoint() {
         boolean enabled = Boolean.parseBoolean(
-                configService.getConfigValue("heating.setpoint.adjustment.enabled", "true")
-        );
-
+                configService.getConfigValue("heating.setpoint.adjustment.enabled", "true"));
         if (!enabled) {
-            log.debug("Heating setpoint adjustment is disabled via configuration");
+            log.debug("Heating setpoint control is disabled via configuration");
             return;
         }
 
         try {
-            log.info("Starting scheduled heating setpoint adjustment");
-            ZonedDateTime now = ZonedDateTime.now(clock).truncatedTo(ChronoUnit.HOURS);
-
-            Optional<HeatingSetpointSchedule> scheduleOpt = scheduleRepository.findNextPendingSchedule(now);
-
-            if (scheduleOpt.isEmpty()) {
-                log.debug("No pending heating setpoint schedule found for current time");
-                return;
-            }
-
-            HeatingSetpointSchedule schedule = scheduleOpt.get();
-            BigDecimal targetSetpoint = schedule.getTargetSetpoint();
-
-            try {
-                thermiaService.setComfortSetpoint(targetSetpoint.doubleValue());
-                schedule.setApplied(true);
-                scheduleRepository.save(schedule);
-
-                // nordpoolPrice is fetched together with the schedule (JOIN FETCH), safe outside a transaction
-                log.info("Applied scheduled heating setpoint {} °C for slot {} (price: {} EUR/MWh)",
-                        targetSetpoint, schedule.getNordpoolPrice().getPriceTimestamp(),
-                        schedule.getNordpoolPrice().getPrice());
-
-            } catch (ThermiaCommException e) {
-                log.error("Failed to apply scheduled heating setpoint: {}", e.getMessage());
-
-            } catch (InvalidValueException e) {
-                // Out-of-range value stored in the schedule (e.g. saved before validation existed).
-                // Leave the heat pump unchanged; the next slot's schedule is picked up next run.
-                log.error("Scheduled heating setpoint {} °C (schedule id {}) rejected, heat pump left unchanged: {}",
-                        targetSetpoint, schedule.getId(), e.getMessage());
-            }
-            log.info("Scheduled heating setpoint adjustment completed");
-
+            heatingControlService.reconcile();
+        } catch (ThermiaCommException e) {
+            log.warn("Heat pump not reachable, setpoint control retried next run: {}", e.getMessage());
         } catch (Exception e) {
-            log.error("Unexpected error during scheduled heating setpoint adjustment", e);
+            log.error("Unexpected error during heating setpoint control", e);
         }
-    }
-
-    public void triggerManualAdjustment() {
-        log.info("Manual heating setpoint adjustment triggered");
-        heatingSetpointService.applyScheduledSetpoint();
     }
 }

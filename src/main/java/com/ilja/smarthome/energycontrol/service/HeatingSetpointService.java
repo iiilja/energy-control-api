@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -30,6 +31,8 @@ import java.util.stream.Collectors;
 public class HeatingSetpointService {
 
     private static final ZoneId EUROPE_TALLINN = ZoneId.of("Europe/Tallinn");
+    /** Nordpool price slots are 15 minutes; Tallinn offsets are whole hours, so slots align with UTC. */
+    private static final long SLOT_SECONDS = 15 * 60;
 
     private final HeatingSetpointScheduleRepository scheduleRepository;
     private final NordpoolPriceRepository nordpoolPriceRepository;
@@ -48,32 +51,56 @@ public class HeatingSetpointService {
         this.configService = configService;
     }
 
+    /**
+     * Scheduled setpoint for every price slot of a Tallinn day: the slot override if there is one,
+     * otherwise the weekly template (otherwise the default). Manual overrides are not included.
+     */
     public List<SetpointScheduleItemResponse> getScheduleForDate(LocalDate date) {
         ZonedDateTime startOfDay = date.atStartOfDay(EUROPE_TALLINN);
         ZonedDateTime endOfDay = startOfDay.plusDays(1);
 
         List<NordpoolPrice> prices = nordpoolPriceRepository.findInPeriod(startOfDay, endOfDay);
 
-        List<HeatingSetpointSchedule> schedules = scheduleRepository.findInPeriod(startOfDay, endOfDay);
-
-        Map<Long, BigDecimal> scheduleMap = schedules.stream()
+        Map<Long, BigDecimal> slotOverrides = scheduleRepository.findInPeriod(startOfDay, endOfDay).stream()
                 .collect(Collectors.toMap(
                         s -> s.getNordpoolPrice().getId(),
                         HeatingSetpointSchedule::getTargetSetpoint
                 ));
 
-        BigDecimal defaultSetpoint = getDefaultSetpoint();
+        List<DefaultWeeklySchedule> template = templateFor(date.getDayOfWeek());
 
         return prices.stream()
                 .map(price -> new SetpointScheduleItemResponse(
                         price.getPriceTimestamp(),
                         price.getPrice(),
-                        scheduleMap.getOrDefault(price.getId(), defaultSetpoint),
+                        slotOverrides.getOrDefault(price.getId(), findSetpointForTime(template,
+                                price.getPriceTimestamp().withZoneSameInstant(EUROPE_TALLINN).toLocalTime())),
                         price.getId()
                 ))
                 .collect(Collectors.toList());
     }
 
+    /**
+     * The setpoint the schedule asks for at {@code instant}: the override for the 15-minute price slot
+     * containing it, otherwise the weekly template for that Tallinn day and time, otherwise the default.
+     * Does not depend on prices being available. Manual overrides are handled by {@code HeatingControlService}.
+     */
+    public BigDecimal scheduledSetpointAt(Instant instant) {
+        ZonedDateTime slotStart = Instant.ofEpochSecond(Math.floorDiv(instant.getEpochSecond(), SLOT_SECONDS) * SLOT_SECONDS)
+                .atZone(EUROPE_TALLINN);
+        Optional<BigDecimal> slotOverride = scheduleRepository
+                .findInPeriod(slotStart, slotStart.plusSeconds(SLOT_SECONDS)).stream()
+                .findFirst()
+                .map(HeatingSetpointSchedule::getTargetSetpoint);
+        if (slotOverride.isPresent()) {
+            return slotOverride.get();
+        }
+
+        ZonedDateTime local = instant.atZone(EUROPE_TALLINN);
+        return findSetpointForTime(templateFor(local.getDayOfWeek()), local.toLocalTime());
+    }
+
+    /** Saves setpoint overrides for single price slots. */
     @Transactional
     public List<HeatingSetpointSchedule> saveSchedules(List<SetpointScheduleItemRequest> requests) {
         List<HeatingSetpointSchedule> schedules = new ArrayList<>();
@@ -87,71 +114,16 @@ public class HeatingSetpointService {
                     .orElse(new HeatingSetpointSchedule(price, request.getSetpoint()));
 
             schedule.setTargetSetpoint(request.getSetpoint());
-            schedule.setApplied(false);
             schedules.add(schedule);
         }
 
         List<HeatingSetpointSchedule> saved = scheduleRepository.saveAll(schedules);
-        log.info("Saved {} heating setpoint schedules", saved.size());
+        log.info("Saved {} heating setpoint slot overrides", saved.size());
         return saved;
     }
 
-    @Transactional
-    public void applyScheduledSetpoint() {
-
-    }
-
-    @Transactional
-    public List<HeatingSetpointSchedule> scheduleSetpoints(List<HeatingSetpointSchedule> schedules) {
-        return scheduleRepository.saveAll(schedules);
-    }
-
-    public List<HeatingSetpointSchedule> getPendingSchedules() {
-        return scheduleRepository.findByAppliedFalse();
-    }
-
-    @Transactional
-    public int applyWeeklyTemplateToDate(LocalDate date) {
-        ZonedDateTime startOfDay = date.atStartOfDay(EUROPE_TALLINN);
-        ZonedDateTime endOfDay = startOfDay.plusDays(1);
-
-        List<NordpoolPrice> prices = nordpoolPriceRepository.findInPeriod(startOfDay, endOfDay);
-
-        if (prices.isEmpty()) {
-            log.warn("No Nordpool prices found for date: {}", date);
-            return 0;
-        }
-
-        DayOfWeek dayOfWeek = date.getDayOfWeek();
-        short dayOfWeekValue = (short) dayOfWeek.getValue();
-
-        List<DefaultWeeklySchedule> weeklyTemplate = weeklyScheduleRepository
-                .findByDayOfWeekOrderByStartTimeAsc(dayOfWeekValue);
-
-        if (weeklyTemplate.isEmpty()) {
-            log.warn("No weekly template found for day of week: {}", dayOfWeekValue);
-            return 0;
-        }
-
-        List<HeatingSetpointSchedule> schedules = new ArrayList<>();
-
-        for (NordpoolPrice price : prices) {
-            // Timestamps loaded from the DB are not guaranteed to be in Tallinn time
-            // (PostgreSQL timestamptz comes back normalised, typically UTC).
-            LocalTime priceTime = price.getPriceTimestamp().withZoneSameInstant(EUROPE_TALLINN).toLocalTime();
-            BigDecimal setpoint = findSetpointForTime(weeklyTemplate, priceTime);
-
-            HeatingSetpointSchedule schedule = scheduleRepository.findByNordpoolPrice(price)
-                    .orElse(new HeatingSetpointSchedule(price, setpoint));
-
-            schedule.setTargetSetpoint(setpoint);
-            schedule.setApplied(false);
-            schedules.add(schedule);
-        }
-
-        List<HeatingSetpointSchedule> saved = scheduleRepository.saveAll(schedules);
-        log.info("Applied weekly template to {} Nordpool price entries for date: {}", saved.size(), date);
-        return saved.size();
+    private List<DefaultWeeklySchedule> templateFor(DayOfWeek dayOfWeek) {
+        return weeklyScheduleRepository.findByDayOfWeekOrderByStartTimeAsc((short) dayOfWeek.getValue());
     }
 
     private BigDecimal findSetpointForTime(List<DefaultWeeklySchedule> template, LocalTime time) {

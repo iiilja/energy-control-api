@@ -25,9 +25,6 @@ public class HeatingSetpointSchedule {
     @Column(name = "target_setpoint", nullable = false, precision = 4, scale = 2)
     private BigDecimal targetSetpoint;
 
-    @Column(name = "applied", nullable = false)
-    private Boolean applied = false;
-
     @Column(name = "created_at", nullable = false, updatable = false)
     private ZonedDateTime createdAt;
 
@@ -39,6 +36,5 @@ public class HeatingSetpointSchedule {
     public HeatingSetpointSchedule(NordpoolPrice nordpoolPrice, BigDecimal targetSetpoint) {
         this.nordpoolPrice = nordpoolPrice;
         this.targetSetpoint = targetSetpoint;
-        this.applied = false;
     }
 }
