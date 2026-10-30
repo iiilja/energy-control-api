@@ -1,5 +1,6 @@
 package com.ilja.smarthome.energycontrol.thermia.service;
 
+import com.ilja.smarthome.energycontrol.exception.InvalidValueException;
 import com.ilja.smarthome.energycontrol.thermia.client.ThermiaModbusClient;
 import com.ilja.smarthome.energycontrol.thermia.dto.HeatPumpDataResponse;
 import com.ilja.smarthome.energycontrol.thermia.dto.ThermiaStatusResponse;
@@ -201,7 +202,7 @@ public class ThermiaHeatPumpService {
     /** Set heat pump operation mode: 1=OFF, 2=Standby, 3=ON/Auto. */
     public void setOperationMode(int mode) {
         if (mode < 1 || mode > 3) {
-            throw new IllegalArgumentException("Operation mode must be 1 (OFF), 2 (Standby) or 3 (ON/Auto), got: " + mode);
+            throw new InvalidValueException("Operation mode must be 1 (OFF), 2 (Standby) or 3 (ON/Auto), got: " + mode);
         }
         log.info("Setting operation mode to {}", mode);
         modbusClient.writeHoldingRegister(REG_OPERATION_MODE, mode);
@@ -220,7 +221,7 @@ public class ThermiaHeatPumpService {
         requireInRange("Tap water start temperature", startCelsius, TAP_WATER_START_MIN, TAP_WATER_START_MAX);
         requireInRange("Tap water stop temperature", stopCelsius, TAP_WATER_STOP_MIN, TAP_WATER_STOP_MAX);
         if (startCelsius >= stopCelsius) {
-            throw new IllegalArgumentException("Tap water start temperature (" + startCelsius
+            throw new InvalidValueException("Tap water start temperature (" + startCelsius
                     + " °C) must be below stop temperature (" + stopCelsius + " °C)");
         }
         log.info("Setting tap water temperatures: start={} °C, stop={} °C", startCelsius, stopCelsius);
@@ -231,7 +232,7 @@ public class ThermiaHeatPumpService {
     /** Set all 7 heat curve Y-axis (supply temperature) points, 15–65 °C each. */
     public void setHeatCurveY(double[] points) {
         if (points == null || points.length != HEAT_CURVE_POINTS) {
-            throw new IllegalArgumentException("Heat curve must have exactly " + HEAT_CURVE_POINTS + " points, got: "
+            throw new InvalidValueException("Heat curve must have exactly " + HEAT_CURVE_POINTS + " points, got: "
                     + (points == null ? "null" : points.length));
         }
         // Validate all points before writing any, so the curve is never left half-updated
@@ -455,7 +456,7 @@ public class ThermiaHeatPumpService {
     private static void requireInRange(String name, double value, double min, double max) {
         // Written as !(in range) so that NaN is rejected too
         if (!(value >= min && value <= max)) {
-            throw new IllegalArgumentException(name + " must be between " + min + " and " + max + " °C, got: " + value);
+            throw new InvalidValueException(name + " must be between " + min + " and " + max + " °C, got: " + value);
         }
     }
 

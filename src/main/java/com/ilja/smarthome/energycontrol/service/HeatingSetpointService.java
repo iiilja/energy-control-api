@@ -1,5 +1,6 @@
 package com.ilja.smarthome.energycontrol.service;
 
+import com.ilja.smarthome.energycontrol.exception.InvalidValueException;
 import com.ilja.smarthome.energycontrol.domain.model.DefaultWeeklySchedule;
 import com.ilja.smarthome.energycontrol.domain.model.HeatingSetpointSchedule;
 import com.ilja.smarthome.energycontrol.domain.model.NordpoolPrice;
@@ -18,8 +19,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -49,11 +52,9 @@ public class HeatingSetpointService {
         ZonedDateTime startOfDay = date.atStartOfDay(EUROPE_TALLINN);
         ZonedDateTime endOfDay = startOfDay.plusDays(1);
 
-        List<NordpoolPrice> prices = nordpoolPriceRepository
-                .findByPriceTimestampBetweenOrderByPriceTimestampAsc(startOfDay, endOfDay);
+        List<NordpoolPrice> prices = nordpoolPriceRepository.findInPeriod(startOfDay, endOfDay);
 
-        List<HeatingSetpointSchedule> schedules = scheduleRepository
-                .findByPriceTimestampBetween(startOfDay, endOfDay);
+        List<HeatingSetpointSchedule> schedules = scheduleRepository.findInPeriod(startOfDay, endOfDay);
 
         Map<Long, BigDecimal> scheduleMap = schedules.stream()
                 .collect(Collectors.toMap(
@@ -79,7 +80,7 @@ public class HeatingSetpointService {
 
         for (SetpointScheduleItemRequest request : requests) {
             NordpoolPrice price = nordpoolPriceRepository.findById(request.getNordpoolPriceId())
-                    .orElseThrow(() -> new IllegalArgumentException(
+                    .orElseThrow(() -> new InvalidValueException(
                             "Nordpool price not found: " + request.getNordpoolPriceId()));
 
             HeatingSetpointSchedule schedule = scheduleRepository.findByNordpoolPrice(price)
@@ -114,8 +115,7 @@ public class HeatingSetpointService {
         ZonedDateTime startOfDay = date.atStartOfDay(EUROPE_TALLINN);
         ZonedDateTime endOfDay = startOfDay.plusDays(1);
 
-        List<NordpoolPrice> prices = nordpoolPriceRepository
-                .findByPriceTimestampBetweenOrderByPriceTimestampAsc(startOfDay, endOfDay);
+        List<NordpoolPrice> prices = nordpoolPriceRepository.findInPeriod(startOfDay, endOfDay);
 
         if (prices.isEmpty()) {
             log.warn("No Nordpool prices found for date: {}", date);
@@ -180,12 +180,29 @@ public class HeatingSetpointService {
                 .toList();
     }
 
+    /**
+     * Replaces the whole weekly template.
+     *
+     * @throws InvalidValueException if two entries share the same day and start time
+     *                               ("05:00" and "05:00:00" count as the same time)
+     */
     @Transactional
     public void saveWeeklySchedule(List<WeeklyScheduleEntryRequest> requests) {
-        weeklyScheduleRepository.deleteAll();
         List<DefaultWeeklySchedule> entries = requests.stream()
                 .map(r -> new DefaultWeeklySchedule(r.dayOfWeek(), LocalTime.parse(r.startTime()), r.setpoint()))
                 .toList();
+
+        Set<String> seen = new HashSet<>();
+        for (DefaultWeeklySchedule e : entries) {
+            if (!seen.add(e.getDayOfWeek() + "@" + e.getStartTime())) {
+                throw new InvalidValueException("Duplicate weekly schedule entry: day " + e.getDayOfWeek()
+                        + " at " + e.getStartTime());
+            }
+        }
+
+        // Bulk delete runs immediately. deleteAll() would only queue the deletes until flush, while
+        // IDENTITY inserts run at once, so re-saving an existing (day, time) would hit unique_day_time.
+        weeklyScheduleRepository.deleteAllInBatch();
         weeklyScheduleRepository.saveAll(entries);
         log.info("Saved weekly schedule with {} entries", entries.size());
     }

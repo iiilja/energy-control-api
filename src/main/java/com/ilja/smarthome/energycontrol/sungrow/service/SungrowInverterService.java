@@ -1,5 +1,6 @@
 package com.ilja.smarthome.energycontrol.sungrow.service;
 
+import com.ilja.smarthome.energycontrol.exception.InvalidValueException;
 import com.ilja.smarthome.energycontrol.sungrow.client.SungrowModbusClient;
 import com.ilja.smarthome.energycontrol.sungrow.dto.SungrowStatusResponse;
 import com.ilja.smarthome.energycontrol.sungrow.exception.SungrowCommunicationException;
@@ -106,7 +107,7 @@ public class SungrowInverterService {
      */
     public void setPowerLimitPercent(double percent) {
         if (percent < 0 || percent > 110) {
-            throw new IllegalArgumentException("Power limit percent must be 0–110, got: " + percent);
+            throw new InvalidValueException("Power limit percent must be 0–110, got: " + percent);
         }
         int raw = (int) Math.round(percent * 10);
         log.info("Setting power limit to {}% (raw {})", percent, raw);
@@ -120,7 +121,7 @@ public class SungrowInverterService {
      */
     public void setPowerLimitKw(double kw) {
         if (kw < 0) {
-            throw new IllegalArgumentException("Power limit kW must be ≥ 0, got: " + kw);
+            throw new InvalidValueException("Power limit kW must be ≥ 0, got: " + kw);
         }
         int raw = (int) Math.round(kw * 10);
         log.info("Setting power limit to {} kW (raw {})", kw, raw);

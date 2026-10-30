@@ -10,6 +10,8 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -46,9 +48,10 @@ public class HeatingSetpointController {
 
     @PutMapping("/weekly-schedule")
     @Operation(summary = "Replace default weekly heating schedule template",
-               description = "Deletes all existing weekly schedule entries and replaces them with the provided list")
+               description = "Deletes all existing weekly schedule entries and replaces them with the provided list. "
+                       + "The list must not be empty; duplicate day + start time is rejected with 400.")
     @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN')")
-    public ResponseEntity<Void> saveWeeklySchedule(@RequestBody List<@Valid WeeklyScheduleEntryRequest> entries) {
+    public ResponseEntity<Void> saveWeeklySchedule(@RequestBody @NotEmpty List<@NotNull @Valid WeeklyScheduleEntryRequest> entries) {
         log.info("Replacing weekly schedule with {} entries", entries.size());
         heatingSetpointService.saveWeeklySchedule(entries);
         return ResponseEntity.ok().build();
@@ -74,7 +77,7 @@ public class HeatingSetpointController {
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "List of setpoint schedules to save",
                     required = true)
-            @RequestBody List<@Valid SetpointScheduleItemRequest> schedules) {
+            @RequestBody List<@NotNull @Valid SetpointScheduleItemRequest> schedules) {
         log.info("Saving {} heating setpoint schedules", schedules.size());
         heatingSetpointService.saveSchedules(schedules);
         return ResponseEntity.ok().build();

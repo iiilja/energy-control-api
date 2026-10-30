@@ -109,29 +109,23 @@ public class NordpoolPriceService {
     public List<NordpoolPrice> getPricesForDate(LocalDate date) {
         LocalDate targetDate = date != null ? date : LocalDate.now(clock.withZone(EUROPE_TALLINN));
         ZonedDateTime start = targetDate.atStartOfDay(EUROPE_TALLINN);
-        ZonedDateTime end = start.plusDays(1).minusSeconds(1);
-        return priceRepository.findByPriceTimestampBetweenOrderByPriceTimestampAsc(start, end);
+        return priceRepository.findInPeriod(start, start.plusDays(1));
     }
 
-    public List<NordpoolPrice> getPricesForToday() {
-        ZonedDateTime startOfDay = ZonedDateTime.now(clock.withZone(EUROPE_TALLINN)).toLocalDate().atStartOfDay(EUROPE_TALLINN);
-        ZonedDateTime endOfDay = startOfDay.plusDays(1);
-        return priceRepository.findByPriceTimestampBetweenOrderByPriceTimestampAsc(startOfDay, endOfDay);
-    }
-
+    /** Prices in the half-open period [start, end). */
     public List<NordpoolPrice> getPricesForDateRange(ZonedDateTime start, ZonedDateTime end) {
-        return priceRepository.findByPriceTimestampBetweenOrderByPriceTimestampAsc(start, end);
+        return priceRepository.findInPeriod(start, end);
     }
 
     public List<NordpoolPrice> getHourlyAveragePricesForDate(LocalDate date) {
         LocalDate targetDate = date != null ? date : LocalDate.now(clock.withZone(EUROPE_TALLINN));
         ZonedDateTime start = targetDate.atStartOfDay(EUROPE_TALLINN);
-        ZonedDateTime end = start.plusDays(1).minusSeconds(1);
-        return getHourlyAveragePricesForDateRange(start, end);
+        return getHourlyAveragePricesForDateRange(start, start.plusDays(1));
     }
 
+    /** Hourly averages of the prices in the half-open period [start, end). */
     public List<NordpoolPrice> getHourlyAveragePricesForDateRange(ZonedDateTime start, ZonedDateTime end) {
-        return priceRepository.findByPriceTimestampBetweenOrderByPriceTimestampAsc(start, end)
+        return priceRepository.findInPeriod(start, end)
                 .stream()
                 .collect(Collectors.groupingBy(
                         p -> p.getPriceTimestamp().truncatedTo(ChronoUnit.HOURS),
@@ -156,7 +150,7 @@ public class NordpoolPriceService {
         ZonedDateTime start = date.atStartOfDay(EUROPE_TALLINN);
         ZonedDateTime nextDay = start.plusDays(1);
         long expectedSlots = Duration.between(start, nextDay).dividedBy(SLOT_LENGTH);
-        return priceRepository.countByPriceTimestampBetween(start, nextDay.minusSeconds(1)) >= expectedSlots;
+        return priceRepository.countInPeriod(start, nextDay) >= expectedSlots;
     }
 
     @Transactional

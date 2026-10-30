@@ -16,10 +16,10 @@ public interface NordpoolPriceRepository extends JpaRepository<NordpoolPrice, Lo
 
     Optional<NordpoolPrice> findByPriceTimestamp(ZonedDateTime timestamp);
 
-    List<NordpoolPrice> findByPriceTimestampBetweenOrderByPriceTimestampAsc(
-            ZonedDateTime start,
-            ZonedDateTime end
-    );
+    /** Prices in the half-open period [start, end): a day query must not include the next day's 00:00 slot. */
+    @Query("SELECT p FROM NordpoolPrice p WHERE p.priceTimestamp >= :start AND p.priceTimestamp < :end " +
+           "ORDER BY p.priceTimestamp ASC")
+    List<NordpoolPrice> findInPeriod(@Param("start") ZonedDateTime start, @Param("end") ZonedDateTime end);
 
     Optional<NordpoolPrice> findFirstByOrderByPriceTimestampDesc();
 
@@ -32,5 +32,7 @@ public interface NordpoolPriceRepository extends JpaRepository<NordpoolPrice, Lo
 
     void deleteByPriceTimestampBefore(ZonedDateTime before);
 
-    long countByPriceTimestampBetween(ZonedDateTime start, ZonedDateTime end);
+    /** Number of prices in the half-open period [start, end). */
+    @Query("SELECT COUNT(p) FROM NordpoolPrice p WHERE p.priceTimestamp >= :start AND p.priceTimestamp < :end")
+    long countInPeriod(@Param("start") ZonedDateTime start, @Param("end") ZonedDateTime end);
 }
