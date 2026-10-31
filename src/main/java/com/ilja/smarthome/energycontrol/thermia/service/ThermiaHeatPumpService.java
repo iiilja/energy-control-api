@@ -191,6 +191,12 @@ public class ThermiaHeatPumpService {
      * Read and return only the temperature sensors.
      * Single batch read of input registers 8–19.
      */
+    /** Read only the comfort wheel (desired indoor temperature), holding register 6, in °C. */
+    public double getComfortSetpoint() {
+        int[] raw = modbusClient.readHoldingRegisters(REG_COMFORT_SETPOINT, 1);
+        return toSigned(raw[0]) / 100.0;
+    }
+
     public ThermiaTemperaturesResponse getTemperatures() {
         int[] raw = modbusClient.readInputRegisters(REG_IN_TEMP_BATCH_START, REG_IN_TEMP_BATCH_COUNT);
         return extractTemperatures(raw, 0);

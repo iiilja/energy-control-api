@@ -1,5 +1,6 @@
 package com.ilja.smarthome.energycontrol.thermia.controller;
 
+import com.ilja.smarthome.energycontrol.service.HeatingControlService;
 import com.ilja.smarthome.energycontrol.thermia.dto.HeatPumpDataResponse;
 import com.ilja.smarthome.energycontrol.thermia.dto.ThermiaTapWaterTemperaturesRequest;
 import com.ilja.smarthome.energycontrol.thermia.dto.ThermiaHeatCurveRequest;
@@ -16,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.Map;
 
 @Slf4j
@@ -25,9 +27,12 @@ import java.util.Map;
 public class ThermiaHeatPumpController {
 
     private final ThermiaHeatPumpService heatPumpService;
+    private final HeatingControlService heatingControlService;
 
-    public ThermiaHeatPumpController(ThermiaHeatPumpService heatPumpService) {
+    public ThermiaHeatPumpController(ThermiaHeatPumpService heatPumpService,
+                                     HeatingControlService heatingControlService) {
         this.heatPumpService = heatPumpService;
+        this.heatingControlService = heatingControlService;
     }
 
     @GetMapping("data")
@@ -72,9 +77,14 @@ public class ThermiaHeatPumpController {
 
     @PostMapping("setpoint")
     @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN')")
-    @Operation(summary = "Set comfort wheel temperature (desired indoor temp), 15–30 °C")
+    @Operation(summary = "Set comfort wheel temperature (desired indoor temp), 15–30 °C",
+               description = "A manual change: written to the heat pump right away and kept for "
+                       + "heating.setpoint.manual_override.hours (a manual override, see /api/v1/heating/setpoint/override), "
+                       + "then the schedule takes over again")
     public ResponseEntity<Void> setSetpoint(@Valid @RequestBody ThermiaSetpointRequest request) {
-        heatPumpService.setComfortSetpoint(request.temperature());
+        // Goes through the control loop instead of writing the register directly: otherwise the
+        // next 15-minute run could put the schedule back before noticing the change.
+        heatingControlService.startOverride(BigDecimal.valueOf(request.temperature()), null);
         return ResponseEntity.noContent().build();
     }
 
