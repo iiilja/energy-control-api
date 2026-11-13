@@ -3,6 +3,7 @@ package com.ilja.smarthome.energycontrol.thermia.controller;
 import com.ilja.smarthome.energycontrol.config.SecurityConfig;
 import com.ilja.smarthome.energycontrol.repository.UserRepository;
 import com.ilja.smarthome.energycontrol.service.HeatingControlService;
+import com.ilja.smarthome.energycontrol.thermia.dto.HeatPumpDataResponse;
 import com.ilja.smarthome.energycontrol.thermia.service.ThermiaHeatPumpService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -47,6 +50,18 @@ class ThermiaHeatPumpControllerTest {
 
         verify(heatingControlService).startOverride(eq(new BigDecimal("23.5")), isNull());
         verify(heatPumpService, never()).setComfortSetpoint(anyDouble());
+    }
+
+    @Test
+    @DisplayName("GET /data serves the recent snapshot instead of always reading the heat pump")
+    @WithMockUser(roles = "READONLY")
+    void dataServesSnapshot() throws Exception {
+        when(heatPumpService.getRecentHeatPumpData()).thenReturn(new HeatPumpDataResponse());
+
+        mvc.perform(get("/api/v1/thermia/data")).andExpect(status().isOk());
+
+        verify(heatPumpService).getRecentHeatPumpData();
+        verify(heatPumpService, never()).getHeatPumpData();
     }
 
     @Test

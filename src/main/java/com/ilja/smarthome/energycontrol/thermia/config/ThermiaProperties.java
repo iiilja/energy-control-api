@@ -27,4 +27,12 @@ public class ThermiaProperties {
     /** Socket connection timeout in milliseconds */
     @Min(1000)
     private int timeoutMs = 5000;
+
+    /** How long a caller waits for its turn when another Modbus transaction is in progress */
+    @Min(1000)
+    private int lockTimeoutMs = 30000;
+
+    /** GET /api/v1/thermia/data serves a snapshot up to this old; data collection refreshes it every minute (fixed delay), so 2 min covers a late refresh; 0 = always read live */
+    @Min(0)
+    private long snapshotMaxAgeMs = 120000;
 }

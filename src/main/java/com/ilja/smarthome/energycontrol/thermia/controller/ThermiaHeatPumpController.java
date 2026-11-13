@@ -37,9 +37,11 @@ public class ThermiaHeatPumpController {
 
     @GetMapping("data")
     @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN', 'ROLE_READONLY')")
-    @Operation(summary = "Full heat pump data snapshot (ESP32 /api/data compatible format)")
+    @Operation(summary = "Full heat pump data snapshot (ESP32 /api/data compatible format)",
+               description = "Served from the last read if it is at most thermia.snapshot-max-age-ms old "
+                       + "(see status.lastUpdate), otherwise read live")
     public HeatPumpDataResponse getData() {
-        return heatPumpService.getHeatPumpData();
+        return heatPumpService.getRecentHeatPumpData();
     }
 
     @GetMapping("status")
