@@ -27,7 +27,14 @@ Docker images: `docker/Dockerfile` (amd64), `docker/Dockerfile.arm64` (productio
 ## Architecture
 
 **Device integration packages** (`thermia/`, `sungrow/`) each contain `client` → `service` → `controller` plus `config/*Properties` and DTOs:
-- `*ModbusClient` opens a **new TCP connection per operation** (no pooling) and wraps failures in `ThermiaCommException` / `SungrowCommunicationException`.
+- `*ModbusClient` delegates to one shared `modbus.ModbusTcpDevice` per device, which handles the following:
+  - **Serialization.** One transaction at a time, behind a fair lock. Waiting is limited by `*.lock-timeout-ms`, then the caller gets a device exception caused by `DeviceBusyException`. Check it with `ModbusTcpDevice.isBusy(e)`; health checks count "busy" as reachable.
+  - **Pacing.** At least 50 ms between transactions.
+  - **Connections.** A new TCP connection for every transaction, with one try (`setRetries(1)`). j2mod's default of 5 tries with back-off would block the queue for about 5× the timeout.
+  - **Errors.** Failures are wrapped in `ThermiaCommException` / `SungrowCommunicationException`.
+  - **Multi-step reads.** Use `client.exclusive(...)` so no other request lands in between (`getStatus` does this). Never open a separate j2mod connection to a device.
+- `GET /thermia/data` and `GET /sungrow/status` serve a snapshot no older than `*.snapshot-max-age-ms` (Thermia 120 s, Sungrow 30 s). `DataCollectionService` refreshes the Thermia snapshot every minute. Full reads publish the snapshot under the device lock. Every write goes through the service's `writeRegister`/`writeCoil`, which writes and discards the snapshot under the same lock, so a read that overlapped a write is never cached.
+- `ModbusTcpDeviceTest` runs against a real j2mod Modbus TCP slave on localhost.
 - **Register addressing:** Thermia and Sungrow docs use 1-based holding/input register numbers, and the clients subtract 1 internally, so pass the documented numbers. Thermia coils and discrete inputs are 0-based and are *not* offset. The Thermia protocol spec is `Thermia-Modbus-protocol_compressed.pdf` in the repo root (untracked).
 - Device host, port and slave-id come from `application.yml` (`thermia.*`, `sungrow.*`, overridable with env vars such as `THERMIA_HOST`), not from the DB.
 

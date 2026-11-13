@@ -56,6 +56,10 @@ sungrow:
   slave-id: ${SUNGROW_SLAVE_ID:1}
   timeout-ms: ${SUNGROW_TIMEOUT_MS:5000}
   rated-power-kw: ${SUNGROW_RATED_POWER_KW:15}
+  # How long a request waits for its turn when another Modbus transaction is running
+  lock-timeout-ms: ${SUNGROW_LOCK_TIMEOUT_MS:30000}
+  # GET /api/v1/sungrow/status serves a snapshot up to this old (0 = always live)
+  snapshot-max-age-ms: ${SUNGROW_SNAPSHOT_MAX_AGE_MS:30000}
 
 # Thermia heat pump (Modbus TCP)
 thermia:
@@ -63,6 +67,11 @@ thermia:
   port: ${THERMIA_PORT:502}
   slave-id: ${THERMIA_SLAVE_ID:1}
   timeout-ms: ${THERMIA_TIMEOUT_MS:5000}
+  # How long a request waits for its turn when another Modbus transaction is running
+  lock-timeout-ms: ${THERMIA_LOCK_TIMEOUT_MS:30000}
+  # GET /api/v1/thermia/data serves a snapshot up to this old; data collection refreshes it every minute
+  # (fixed delay, so a refresh can be late: keep this about 2x collection.interval.ms; 0 = always live)
+  snapshot-max-age-ms: ${THERMIA_SNAPSHOT_MAX_AGE_MS:120000}
 
 # Sungrow feed-in limit scheduler (1.1 cent/kWh = 11.0 EUR/MWh)
 # Enable via DB config key: sungrow.feed_in_limit.enabled = true

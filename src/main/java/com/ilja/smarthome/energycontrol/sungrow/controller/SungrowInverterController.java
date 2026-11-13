@@ -29,7 +29,7 @@ public class SungrowInverterController {
     @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN', 'ROLE_READONLY')")
     @Operation(summary = "Read inverter status", description = "Returns running state and current power-limit settings")
     public SungrowStatusResponse getStatus() {
-        return inverterService.getStatus();
+        return inverterService.getRecentStatus();
     }
 
     @GetMapping("health")

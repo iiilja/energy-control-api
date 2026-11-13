@@ -1,13 +1,19 @@
 package com.ilja.smarthome.energycontrol.thermia.service;
 
 import com.ilja.smarthome.energycontrol.exception.InvalidValueException;
+import com.ilja.smarthome.energycontrol.modbus.ModbusTcpDevice;
 import com.ilja.smarthome.energycontrol.thermia.client.ThermiaModbusClient;
+import com.ilja.smarthome.energycontrol.thermia.config.ThermiaProperties;
 import com.ilja.smarthome.energycontrol.thermia.dto.HeatPumpDataResponse;
 import com.ilja.smarthome.energycontrol.thermia.dto.ThermiaStatusResponse;
 import com.ilja.smarthome.energycontrol.thermia.dto.ThermiaTemperaturesResponse;
 import com.ilja.smarthome.energycontrol.thermia.exception.ThermiaCommException;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import lombok.NonNull;
@@ -98,34 +104,43 @@ public class ThermiaHeatPumpService {
     static final double HEAT_CURVE_MAX       = 65.0;
     static final int    HEAT_CURVE_POINTS    = 7;
 
-    // Millis between Modbus read batches (matches Arduino MODBUS_TRANSACTION_DELAY)
-    private static final int BATCH_DELAY_MS = 50;
-
     private final ThermiaModbusClient modbusClient;
+    private final Clock clock;
+    private final long snapshotMaxAgeMs;
 
-    public ThermiaHeatPumpService(ThermiaModbusClient modbusClient) {
+    /** Last full data read, served to the UI while fresh. Null after any write. */
+    private volatile Snapshot latest;
+    /** Bumped by every write, so a read that overlapped a write is not cached. */
+    private final AtomicLong writeGeneration = new AtomicLong();
+
+    private record Snapshot(HeatPumpDataResponse data, Instant readAt) {}
+
+    public ThermiaHeatPumpService(ThermiaModbusClient modbusClient, ThermiaProperties props, Clock clock) {
         this.modbusClient = modbusClient;
+        this.clock = clock;
+        this.snapshotMaxAgeMs = props.getSnapshotMaxAgeMs();
     }
 
     // -------------------------------------------------------------------------
     // Read
 
     /**
-     * Read and return a complete status snapshot from the heat pump.
-     * Uses four read batches with 50 ms gaps (same pattern as the Arduino firmware).
+     * Read and return a complete status snapshot from the heat pump: five read batches done as one
+     * exclusive session, so no other request lands in between. The client keeps the pauses between them.
      */
     public ThermiaStatusResponse getStatus() {
+        return modbusClient.exclusive(this::readStatus);
+    }
+
+    private ThermiaStatusResponse readStatus() {
         // Batch 1: input registers 1–27 (demand, RPM, temperatures, heat curve X)
         int[] inputLow = modbusClient.readInputRegisters(REG_IN_STATUS_BATCH_START, REG_IN_STATUS_BATCH_COUNT);
-        sleep(BATCH_DELAY_MS);
 
         // Batch 2: input registers 49–55 (running hours, compressor speed %)
         int[] inputHigh = modbusClient.readInputRegisters(REG_IN_HOURS_BATCH_START, REG_IN_HOURS_BATCH_COUNT);
-        sleep(BATCH_DELAY_MS);
 
         // Batch 3: holding registers 1–24 (mode, setpoint, heat curve Y, DHW temps)
         int[] holding = modbusClient.readHoldingRegisters(REG_HOLDING_BATCH_START, REG_HOLDING_BATCH_COUNT);
-        sleep(BATCH_DELAY_MS);
 
         // Batch 4: alarm flags (FC02) and function enable states (FC01)
         boolean[] alarms = modbusClient.readDiscreteInputs(DISCRETE_ALARM_A, 3);
@@ -211,7 +226,7 @@ public class ThermiaHeatPumpService {
             throw new InvalidValueException("Operation mode must be 1 (OFF), 2 (Standby) or 3 (ON/Auto), got: " + mode);
         }
         log.info("Setting operation mode to {}", mode);
-        modbusClient.writeHoldingRegister(REG_OPERATION_MODE, mode);
+        writeRegister(REG_OPERATION_MODE, mode);
     }
 
     /** Set comfort wheel (desired indoor temperature), 15–30 °C. */
@@ -219,7 +234,7 @@ public class ThermiaHeatPumpService {
         requireInRange("Comfort setpoint", celsius, COMFORT_SETPOINT_MIN, COMFORT_SETPOINT_MAX);
         int raw = (int) Math.round(celsius * 100);
         log.info("Setting comfort setpoint to {} °C (raw {})", celsius, raw);
-        modbusClient.writeHoldingRegister(REG_COMFORT_SETPOINT, raw);
+        writeRegister(REG_COMFORT_SETPOINT, raw);
     }
 
     /** Set tap water start and stop temperatures. */
@@ -231,8 +246,8 @@ public class ThermiaHeatPumpService {
                     + " °C) must be below stop temperature (" + stopCelsius + " °C)");
         }
         log.info("Setting tap water temperatures: start={} °C, stop={} °C", startCelsius, stopCelsius);
-        modbusClient.writeHoldingRegister(REG_TAP_WATER_START_TEMP, (int) Math.round(startCelsius * 100));
-        modbusClient.writeHoldingRegister(REG_TAP_WATER_STOP_TEMP,  (int) Math.round(stopCelsius  * 100));
+        writeRegister(REG_TAP_WATER_START_TEMP, (int) Math.round(startCelsius * 100));
+        writeRegister(REG_TAP_WATER_STOP_TEMP,  (int) Math.round(stopCelsius  * 100));
     }
 
     /** Set all 7 heat curve Y-axis (supply temperature) points, 15–65 °C each. */
@@ -247,7 +262,7 @@ public class ThermiaHeatPumpService {
         }
         log.info("Setting heat curve Y points: {}", points);
         for (int i = 0; i < 7; i++) {
-            modbusClient.writeHoldingRegister(REG_HEAT_CURVE_Y_START + i, (int) Math.round(points[i] * 100));
+            writeRegister(REG_HEAT_CURVE_Y_START + i, (int) Math.round(points[i] * 100));
         }
     }
 
@@ -256,65 +271,95 @@ public class ThermiaHeatPumpService {
 
     public void enableTapWater() {
         log.info("Enabling tap water");
-        modbusClient.writeCoil(COIL_TAP_WATER_ENABLED, true);
+        writeCoil(COIL_TAP_WATER_ENABLED, true);
     }
 
     public void disableTapWater() {
         log.info("Disabling tap water");
-        modbusClient.writeCoil(COIL_TAP_WATER_ENABLED, false);
+        writeCoil(COIL_TAP_WATER_ENABLED, false);
     }
 
     public void enableHeating() {
         log.info("Enabling heating");
-        modbusClient.writeCoil(COIL_HEATING_ENABLED, true);
+        writeCoil(COIL_HEATING_ENABLED, true);
     }
 
     public void disableHeating() {
         log.info("Disabling heating");
-        modbusClient.writeCoil(COIL_HEATING_ENABLED, false);
+        writeCoil(COIL_HEATING_ENABLED, false);
     }
 
     public void enableCooling() {
         log.info("Enabling active cooling");
-        modbusClient.writeCoil(COIL_COOLING_ENABLED, true);
+        writeCoil(COIL_COOLING_ENABLED, true);
     }
 
     public void disableCooling() {
         log.info("Disabling active cooling");
-        modbusClient.writeCoil(COIL_COOLING_ENABLED, false);
+        writeCoil(COIL_COOLING_ENABLED, false);
     }
 
     public void enableHotGasPump() {
         log.info("Enabling hot gas pump");
-        modbusClient.writeCoil(COIL_HOT_GAS_PUMP, true);
+        writeCoil(COIL_HOT_GAS_PUMP, true);
     }
 
     public void disableHotGasPump() {
         log.info("Disabling hot gas pump");
-        modbusClient.writeCoil(COIL_HOT_GAS_PUMP, false);
+        writeCoil(COIL_HOT_GAS_PUMP, false);
     }
 
     public void enableAntiLegionella() {
         log.info("Enabling anti-legionella cycle");
-        modbusClient.writeCoil(COIL_ANTI_LEGIONELLA, true);
+        writeCoil(COIL_ANTI_LEGIONELLA, true);
     }
 
     public void disableAntiLegionella() {
         log.info("Disabling anti-legionella cycle");
-        modbusClient.writeCoil(COIL_ANTI_LEGIONELLA, false);
+        writeCoil(COIL_ANTI_LEGIONELLA, false);
     }
 
     public void enableInternalAdditionalHeater() {
         log.info("Enabling internal additional heater");
-        modbusClient.writeCoil(COIL_INTERNAL_HEATER, true);
+        writeCoil(COIL_INTERNAL_HEATER, true);
     }
 
     public void disableInternalAdditionalHeater() {
         log.info("Disabling internal additional heater");
-        modbusClient.writeCoil(COIL_INTERNAL_HEATER, false);
+        writeCoil(COIL_INTERNAL_HEATER, false);
     }
 
+    /**
+     * Full data snapshot for the UI: the last read if it is at most {@code thermia.snapshot-max-age-ms} old
+     * (data collection refreshes it every minute), otherwise a live read. Concurrent callers share one live
+     * read: whoever waited for the device finds the fresh snapshot.
+     */
+    public HeatPumpDataResponse getRecentHeatPumpData() {
+        Snapshot fresh = freshSnapshot();
+        if (fresh != null) {
+            return fresh.data();
+        }
+        return modbusClient.exclusive(() -> {
+            Snapshot s = freshSnapshot();
+            return s != null ? s.data() : getHeatPumpData();
+        });
+    }
+
+    /** Live full data read from the heat pump (also refreshes the snapshot served by {@link #getRecentHeatPumpData}). */
     public HeatPumpDataResponse getHeatPumpData() {
+        // Read and publish under the device lock: a caller waiting in getRecentHeatPumpData then finds the
+        // snapshot instead of reading again, and no write can slip in between.
+        return modbusClient.exclusive(() -> {
+            long generation = writeGeneration.get();
+            HeatPumpDataResponse data = readHeatPumpData();
+            if (writeGeneration.get() == generation) {
+                latest = new Snapshot(data, Instant.now(clock));
+            }
+            return data;
+        });
+    }
+
+    private HeatPumpDataResponse readHeatPumpData() {
         ThermiaStatusResponse s = getStatus();
 
         HeatPumpDataResponse.StatusDto statusDto = new HeatPumpDataResponse.StatusDto();
@@ -363,6 +408,46 @@ public class ThermiaHeatPumpService {
         result.setInternalHeater(internalHeaterDto);
         result.setEnables(enablesDto);
         return result;
+    }
+
+    private Snapshot freshSnapshot() {
+        Snapshot s = latest;
+        if (s == null || snapshotMaxAgeMs <= 0) {
+            return null;
+        }
+        long ageMs = Duration.between(s.readAt(), Instant.now(clock)).toMillis();
+        return ageMs >= 0 && ageMs <= snapshotMaxAgeMs ? s : null; // negative: the clock stepped back
+    }
+
+    /**
+     * Every write goes through here, so the UI never gets a snapshot from before its own change.
+     * Write and invalidation happen under the device lock, so no read can publish in between.
+     */
+    private void writeRegister(int register, int value) {
+        modbusClient.exclusive(() -> {
+            try {
+                modbusClient.writeHoldingRegister(register, value);
+            } finally {
+                invalidateSnapshot();
+            }
+            return null;
+        });
+    }
+
+    private void writeCoil(int coil, boolean value) {
+        modbusClient.exclusive(() -> {
+            try {
+                modbusClient.writeCoil(coil, value);
+            } finally {
+                invalidateSnapshot();
+            }
+            return null;
+        });
+    }
+
+    private void invalidateSnapshot() {
+        writeGeneration.incrementAndGet();
+        latest = null;
     }
 
     private static HeatPumpDataResponse.@NonNull TemperaturesDto getTemperaturesDto(ThermiaStatusResponse s) {
@@ -414,6 +499,11 @@ public class ThermiaHeatPumpService {
             modbusClient.readInputRegisters(REG_IN_DISCHARGE_TEMP, 1);
             return true;
         } catch (ThermiaCommException e) {
+            if (ModbusTcpDevice.isBusy(e)) {
+                // Another transaction kept the heat pump busy: it is answering someone, so count it as reachable.
+                log.info("Thermia connection test: heat pump busy with another request");
+                return true;
+            }
             log.warn("Thermia connection test failed: {}", e.getMessage());
             return false;
         }
@@ -463,14 +553,6 @@ public class ThermiaHeatPumpService {
         // Written as !(in range) so that NaN is rejected too
         if (!(value >= min && value <= max)) {
             throw new InvalidValueException(name + " must be between " + min + " and " + max + " °C, got: " + value);
-        }
-    }
-
-    private static void sleep(int ms) {
-        try {
-            Thread.sleep(ms);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
         }
     }
 }

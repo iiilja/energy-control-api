@@ -1,11 +1,18 @@
 package com.ilja.smarthome.energycontrol.sungrow.service;
 
 import com.ilja.smarthome.energycontrol.exception.InvalidValueException;
+import com.ilja.smarthome.energycontrol.modbus.ModbusTcpDevice;
 import com.ilja.smarthome.energycontrol.sungrow.client.SungrowModbusClient;
+import com.ilja.smarthome.energycontrol.sungrow.config.SungrowProperties;
 import com.ilja.smarthome.energycontrol.sungrow.dto.SungrowStatusResponse;
 import com.ilja.smarthome.energycontrol.sungrow.exception.SungrowCommunicationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * High-level service for the Sungrow SG15RT inverter.
@@ -43,9 +50,20 @@ public class SungrowInverterService {
     private static final int CMD_LIMIT_OFF       = 0x55;
 
     private final SungrowModbusClient modbusClient;
+    private final Clock clock;
+    private final long snapshotMaxAgeMs;
 
-    public SungrowInverterService(SungrowModbusClient modbusClient) {
+    /** Last status read, served to the UI while fresh. Null after any write. */
+    private volatile Snapshot latest;
+    /** Bumped by every write, so a read that overlapped a write is not cached. */
+    private final AtomicLong writeGeneration = new AtomicLong();
+
+    private record Snapshot(SungrowStatusResponse status, Instant readAt) {}
+
+    public SungrowInverterService(SungrowModbusClient modbusClient, SungrowProperties props, Clock clock) {
         this.modbusClient = modbusClient;
+        this.clock = clock;
+        this.snapshotMaxAgeMs = props.getSnapshotMaxAgeMs();
     }
 
     // -------------------------------------------------------------------------
@@ -55,6 +73,33 @@ public class SungrowInverterService {
      * Read and return a complete status snapshot from the inverter.
      */
     public SungrowStatusResponse getStatus() {
+        // Read and publish under the device lock, so no write can slip in between.
+        return modbusClient.exclusive(() -> {
+            long generation = writeGeneration.get();
+            SungrowStatusResponse status = readStatus();
+            if (writeGeneration.get() == generation) {
+                latest = new Snapshot(status, Instant.now(clock));
+            }
+            return status;
+        });
+    }
+
+    /**
+     * Status for the UI: the last read if it is at most {@code sungrow.snapshot-max-age-ms} old, otherwise a live
+     * read. Concurrent callers share one live read.
+     */
+    public SungrowStatusResponse getRecentStatus() {
+        Snapshot fresh = freshSnapshot();
+        if (fresh != null) {
+            return fresh.status();
+        }
+        return modbusClient.exclusive(() -> {
+            Snapshot s = freshSnapshot();
+            return s != null ? s.status() : getStatus();
+        });
+    }
+
+    private SungrowStatusResponse readStatus() {
         // Read registers 5006–5008 in a single request (3 consecutive registers),
         // then read 5039 separately as it is not adjacent.
         int[] first = modbusClient.readHoldingRegisters(REG_START_STOP, 3);
@@ -111,7 +156,7 @@ public class SungrowInverterService {
         }
         int raw = (int) Math.round(percent * 10);
         log.info("Setting power limit to {}% (raw {})", percent, raw);
-        modbusClient.writeHoldingRegister(REG_POWER_LIMIT_PERCENT, raw);
+        writeRegister(REG_POWER_LIMIT_PERCENT, raw);
     }
 
     /**
@@ -125,7 +170,7 @@ public class SungrowInverterService {
         }
         int raw = (int) Math.round(kw * 10);
         log.info("Setting power limit to {} kW (raw {})", kw, raw);
-        modbusClient.writeHoldingRegister(REG_POWER_LIMIT_KW, raw);
+        writeRegister(REG_POWER_LIMIT_KW, raw);
     }
 
     public boolean isPowerLimitEnabled() {
@@ -141,7 +186,7 @@ public class SungrowInverterService {
      */
     public void enablePowerLimit() {
         log.info("Enabling power limit");
-        modbusClient.writeHoldingRegister(REG_POWER_LIMIT_SWITCH, CMD_LIMIT_ON);
+        writeRegister(REG_POWER_LIMIT_SWITCH, CMD_LIMIT_ON);
     }
 
     /**
@@ -149,7 +194,7 @@ public class SungrowInverterService {
      */
     public void disablePowerLimit() {
         log.info("Disabling power limit");
-        modbusClient.writeHoldingRegister(REG_POWER_LIMIT_SWITCH, CMD_LIMIT_OFF);
+        writeRegister(REG_POWER_LIMIT_SWITCH, CMD_LIMIT_OFF);
     }
 
     // -------------------------------------------------------------------------
@@ -160,7 +205,7 @@ public class SungrowInverterService {
      */
     public void startInverter() {
         log.info("Sending START command to inverter");
-        modbusClient.writeHoldingRegister(REG_START_STOP, CMD_RUN);
+        writeRegister(REG_START_STOP, CMD_RUN);
     }
 
     /**
@@ -168,7 +213,35 @@ public class SungrowInverterService {
      */
     public void stopInverter() {
         log.warn("Sending STOP command to inverter");
-        modbusClient.writeHoldingRegister(REG_START_STOP, CMD_STOP);
+        writeRegister(REG_START_STOP, CMD_STOP);
+    }
+
+    // -------------------------------------------------------------------------
+    // Snapshot
+
+    private Snapshot freshSnapshot() {
+        Snapshot s = latest;
+        if (s == null || snapshotMaxAgeMs <= 0) {
+            return null;
+        }
+        long ageMs = Duration.between(s.readAt(), Instant.now(clock)).toMillis();
+        return ageMs >= 0 && ageMs <= snapshotMaxAgeMs ? s : null; // negative: the clock stepped back
+    }
+
+    /**
+     * Every write goes through here, so the UI never gets a snapshot from before its own change.
+     * Write and invalidation happen under the device lock, so no read can publish in between.
+     */
+    private void writeRegister(int register, int value) {
+        modbusClient.exclusive(() -> {
+            try {
+                modbusClient.writeHoldingRegister(register, value);
+            } finally {
+                writeGeneration.incrementAndGet();
+                latest = null;
+            }
+            return null;
+        });
     }
 
     // -------------------------------------------------------------------------
@@ -184,6 +257,11 @@ public class SungrowInverterService {
             modbusClient.readHoldingRegister(REG_START_STOP);
             return true;
         } catch (SungrowCommunicationException e) {
+            if (ModbusTcpDevice.isBusy(e)) {
+                // Another transaction kept the inverter busy: it is answering someone, so count it as reachable.
+                log.info("Inverter connection test: inverter busy with another request");
+                return true;
+            }
             log.warn("Inverter connection test failed: {}", e.getMessage());
             return false;
         }
