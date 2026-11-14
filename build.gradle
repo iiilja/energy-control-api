@@ -84,4 +84,8 @@ tasks.named('jar') {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // Same default time zone as the Docker image. With hibernate.jdbc.time_zone=UTC, Hibernate shifts
+    // LocalTime (TIME columns, e.g. the weekly template) by the JVM's offset, so on a Tallinn-time PC the
+    // PostgreSQL tests would store 00:00 as 22:00.
+    systemProperty 'user.timezone', 'UTC'
 }
