@@ -58,4 +58,6 @@ Prices are 15‑minute granularity in the DB. `NordpoolPriceService` derives hou
 
 **Write guards:** `ThermiaHeatPumpService` range-checks every register write (comfort setpoint 15–30 °C, operation mode 1–3, tap water start 30–60 / stop 30–65 with start < stop, heat curve 7 points 15–65 °C) and throws `InvalidValueException` before touching Modbus. Keep the DTO constraints and these checks in sync, because schedulers bypass the DTOs.
 
+**Configuration API:** `GET /api/v1/config` lists `system_configuration`; `PUT /api/v1/config/{key}` (ADMIN) changes an existing value after `ConfigValueValidator` checks it (400 if invalid, 404 for an unknown key) and publishes `ConfigurationChangedEvent`; price optimisation keys and `heating.setpoint.default` re-plan at once. Add a rule there when a new key needs one.
+
 Swagger UI: `http://localhost:8080/swagger-ui.html`. All API routes are under `/api/v1/{thermia,sungrow,nordpool,heating}`.
