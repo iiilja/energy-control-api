@@ -17,6 +17,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Sort;
+import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -50,7 +51,9 @@ import static org.assertj.core.api.Assertions.tuple;
  *   <li>JPQL queries run on PostgreSQL, with timestamps stored the way production stores them.</li>
  * </ul>
  * Skipped (not failed) when Docker is not running. Each test runs in a transaction that is rolled
- * back, so the seed data from the migrations is all a test can rely on.
+ * back, so the seed data from the migrations is all a test can rely on. The nested classes need their
+ * own {@code @Transactional}: the transaction listener looks at the test method's class, not at the
+ * enclosing class carrying {@code @DataJpaTest}.
  */
 @Testcontainers(disabledWithoutDocker = true)
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
@@ -75,6 +78,7 @@ class PostgresRepositoryTest {
     // ---------------------------------------------------------------------------------------------
 
     @Nested
+    @Transactional // not inherited from @DataJpaTest by @Nested classes: without it nothing is rolled back
     @DisplayName("migrations")
     class Migrations {
 
@@ -142,6 +146,7 @@ class PostgresRepositoryTest {
     // ---------------------------------------------------------------------------------------------
 
     @Nested
+    @Transactional // not inherited from @DataJpaTest by @Nested classes: without it nothing is rolled back
     @DisplayName("Nordpool prices")
     class Prices {
 
@@ -232,6 +237,7 @@ class PostgresRepositoryTest {
     // ---------------------------------------------------------------------------------------------
 
     @Nested
+    @Transactional // not inherited from @DataJpaTest by @Nested classes: without it nothing is rolled back
     @DisplayName("price-slot setpoint overrides")
     class SlotOverrides {
 
@@ -317,6 +323,7 @@ class PostgresRepositoryTest {
     // ---------------------------------------------------------------------------------------------
 
     @Nested
+    @Transactional // not inherited from @DataJpaTest by @Nested classes: without it nothing is rolled back
     @DisplayName("manual overrides and control state")
     class DesiredState {
 
@@ -403,6 +410,7 @@ class PostgresRepositoryTest {
     // ---------------------------------------------------------------------------------------------
 
     @Nested
+    @Transactional // not inherited from @DataJpaTest by @Nested classes: without it nothing is rolled back
     @DisplayName("weekly template")
     class WeeklyTemplate {
 
