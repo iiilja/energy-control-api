@@ -7,6 +7,7 @@ import com.ilja.smarthome.energycontrol.domain.model.HeatingSetpointSchedule;
 import com.ilja.smarthome.energycontrol.domain.model.NordpoolPrice;
 import com.ilja.smarthome.energycontrol.domain.model.SystemConfiguration;
 import jakarta.persistence.EntityManager;
+import org.hibernate.Hibernate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,7 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * Migrations, entity mappings and repository queries against a real PostgreSQL (the version on the
@@ -102,11 +104,17 @@ class PostgresRepositoryTest {
                     "nordpool.fetch.enabled",
                     "nordpool.cleanup.enabled",
                     "nordpool.cleanup.days_to_keep",
-                    "sungrow.feed_in_limit.enabled");
+                    "sungrow.feed_in_limit.enabled",
+                    "heating.price_optimization.enabled",
+                    "heating.price_optimization.peak_threshold",
+                    "heating.price_optimization.raise",
+                    "heating.price_optimization.lower",
+                    "heating.price_optimization.compensation_minutes");
             assertThat(new BigDecimal(values.get("heating.setpoint.default"))).isBetween(
                     new BigDecimal("15"), new BigDecimal("30"));
             assertThat(Double.parseDouble(values.get("heating.setpoint.manual_override.hours"))).isPositive();
             assertThat(Integer.parseInt(values.get("nordpool.cleanup.days_to_keep"))).isPositive();
+            assertThat(values.get("heating.price_optimization.enabled")).isEqualTo("false");
         }
 
         @Test
@@ -249,6 +257,60 @@ class PostgresRepositoryTest {
             slotOverrides.flush();
             assertThat(slotOverrides.findByNordpoolPrice(first)).isEmpty();
             assertThat(slotOverrides.count()).isEqualTo(slots.size() - 1);
+        }
+
+        @Test
+        @DisplayName("source is stored, defaults to MANUAL, and the price comes loaded")
+        void sourceAndFetchedPrice() {
+            ZonedDateTime start = ZonedDateTime.of(2026, 1, 15, 0, 0, 0, 0, TALLINN);
+            List<NordpoolPrice> slots = saveQuarters(start, start.plusMinutes(30));
+            slotOverrides.save(new HeatingSetpointSchedule(slots.get(0), new BigDecimal("22.0")));
+            slotOverrides.save(new HeatingSetpointSchedule(slots.get(1), new BigDecimal("20.0"),
+                    HeatingSetpointSchedule.Source.PRICE));
+            slotOverrides.flush();
+            em.clear();
+
+            List<HeatingSetpointSchedule> found = slotOverrides.findInPeriod(start, start.plusMinutes(30));
+
+            assertThat(found).allSatisfy(s -> assertThat(Hibernate.isInitialized(s.getNordpoolPrice())).isTrue());
+            assertThat(found).extracting(s -> s.getNordpoolPrice().getPriceTimestamp().toInstant(),
+                            HeatingSetpointSchedule::getSource)
+                    .containsExactlyInAnyOrder(
+                            tuple(start.toInstant(), HeatingSetpointSchedule.Source.MANUAL),
+                            tuple(start.plusMinutes(15).toInstant(), HeatingSetpointSchedule.Source.PRICE));
+        }
+
+        @Test
+        @DisplayName("deleteByIdInAndSource keeps a row that is no longer PRICE")
+        void guardedDelete() {
+            ZonedDateTime start = ZonedDateTime.of(2026, 1, 15, 0, 0, 0, 0, TALLINN);
+            List<NordpoolPrice> slots = saveQuarters(start, start.plusMinutes(30));
+            HeatingSetpointSchedule planned = slotOverrides.save(new HeatingSetpointSchedule(slots.get(0),
+                    new BigDecimal("20.0"), HeatingSetpointSchedule.Source.PRICE));
+            HeatingSetpointSchedule manual = slotOverrides.save(new HeatingSetpointSchedule(slots.get(1),
+                    new BigDecimal("23.0"), HeatingSetpointSchedule.Source.MANUAL));
+            slotOverrides.flush();
+
+            int deleted = slotOverrides.deleteByIdInAndSource(List.of(planned.getId(), manual.getId()),
+                    HeatingSetpointSchedule.Source.PRICE);
+            em.clear();
+
+            assertThat(deleted).isEqualTo(1);
+            assertThat(slotOverrides.findAll()).extracting(HeatingSetpointSchedule::getId)
+                    .containsExactly(manual.getId());
+        }
+
+        @Test
+        @DisplayName("source is MANUAL or PRICE")
+        void sourceChecked() {
+            NordpoolPrice slot = prices.saveAndFlush(new NordpoolPrice(
+                    ZonedDateTime.of(2026, 1, 15, 0, 0, 0, 0, TALLINN), BigDecimal.ONE));
+
+            assertThatThrownBy(() -> em.createNativeQuery("INSERT INTO heating_setpoint_schedule "
+                    + "(nordpool_price_id, target_setpoint, source, created_at) VALUES ("
+                    + slot.getId() + ", 21, 'OTHER', now())")
+                    .executeUpdate())
+                    .rootCause().hasMessageContaining("valid_slot_override_source");
         }
     }
 
