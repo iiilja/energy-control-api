@@ -56,13 +56,14 @@ class HeatingSetpointServiceTest {
     @Mock private NordpoolPriceRepository nordpoolPriceRepository;
     @Mock private DefaultWeeklyScheduleRepository weeklyScheduleRepository;
     @Mock private ConfigurationService configService;
+    @Mock private org.springframework.context.ApplicationEventPublisher events;
 
     private HeatingSetpointService service;
 
     @BeforeEach
     void setUp() {
         service = new HeatingSetpointService(
-                scheduleRepository, nordpoolPriceRepository, weeklyScheduleRepository, configService);
+                scheduleRepository, nordpoolPriceRepository, weeklyScheduleRepository, configService, events);
         lenient().when(configService.getConfigValue("heating.setpoint.default", "21.0")).thenReturn("21.0");
     }
 
@@ -140,6 +141,24 @@ class HeatingSetpointServiceTest {
 
             // Wednesday 28 Oct 05:00 Tallinn
             assertThat(service.scheduledSetpointAt(Instant.parse("2026-10-28T03:00:00Z"))).isEqualByComparingTo("21.0");
+        }
+
+        @Test
+        @DisplayName("templateSetpointsAt: same answers in order, each weekday's template read once")
+        void templateForManyInstants() {
+            givenTemplate(1, "00:00", "20.0", "05:00", "22.0");
+            givenTemplate(2, "00:00", "19.0");
+
+            List<java.math.BigDecimal> setpoints = service.templateSetpointsAt(List.of(
+                    Instant.parse("2026-10-26T02:45:00Z"),   // Mon 04:45 Tallinn
+                    Instant.parse("2026-10-26T03:00:00Z"),   // Mon 05:00
+                    Instant.parse("2026-10-26T22:00:00Z"),   // Tue 00:00
+                    Instant.parse("2026-10-26T21:45:00Z"))); // Mon 23:45
+
+            assertThat(setpoints).extracting(java.math.BigDecimal::toPlainString)
+                    .containsExactly("20.0", "22.0", "19.0", "22.0");
+            verify(weeklyScheduleRepository, org.mockito.Mockito.times(1)).findByDayOfWeekOrderByStartTimeAsc((short) 1);
+            verify(weeklyScheduleRepository, org.mockito.Mockito.times(1)).findByDayOfWeekOrderByStartTimeAsc((short) 2);
         }
     }
 

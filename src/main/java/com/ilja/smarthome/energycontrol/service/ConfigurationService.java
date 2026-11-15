@@ -1,13 +1,17 @@
 package com.ilja.smarthome.energycontrol.service;
 
 import com.ilja.smarthome.energycontrol.domain.model.SystemConfiguration;
+import com.ilja.smarthome.energycontrol.dto.ConfigEntryDto;
 import com.ilja.smarthome.energycontrol.exception.ConfigurationNotFoundException;
 import com.ilja.smarthome.energycontrol.repository.SystemConfigurationRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.ZoneId;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -20,10 +24,47 @@ import java.util.List;
 public class ConfigurationService {
 
     private final SystemConfigurationRepository repository;
+    private final ApplicationEventPublisher events;
 
     @Autowired
-    public ConfigurationService(SystemConfigurationRepository repository) {
+    public ConfigurationService(SystemConfigurationRepository repository, ApplicationEventPublisher events) {
         this.repository = repository;
+        this.events = events;
+    }
+
+    /** All entries, sorted by key, for the settings page. */
+    public List<ConfigEntryDto> getAll() {
+        return repository.findAll().stream()
+                .sorted(Comparator.comparing(SystemConfiguration::getConfigKey))
+                .map(ConfigurationService::toDto)
+                .toList();
+    }
+
+    /**
+     * Changes an existing value after checking it ({@link ConfigValueValidator}), and publishes a
+     * {@link ConfigurationChangedEvent} so dependent jobs can react once the change has committed.
+     *
+     * @throws ConfigurationNotFoundException if the key does not exist
+     * @throws com.ilja.smarthome.energycontrol.exception.InvalidValueException if the value is invalid
+     */
+    @Transactional
+    public ConfigEntryDto update(String key, String value) {
+        SystemConfiguration config = repository.findByConfigKey(key)
+                .orElseThrow(() -> new ConfigurationNotFoundException(key));
+        String trimmed = value == null ? null : value.trim();
+        ConfigValueValidator.validate(key, trimmed);
+
+        log.info("Updating configuration {} from '{}' to '{}'", key, config.getConfigValue(), trimmed);
+        config.setConfigValue(trimmed);
+        SystemConfiguration saved = repository.saveAndFlush(config);
+        events.publishEvent(new ConfigurationChangedEvent(key));
+        return toDto(saved);
+    }
+
+    private static ConfigEntryDto toDto(SystemConfiguration c) {
+        return new ConfigEntryDto(c.getConfigKey(), c.getConfigValue(), c.getDescription(),
+                c.getUpdatedAt() == null ? null
+                        : c.getUpdatedAt().atZone(ZoneId.systemDefault()).toOffsetDateTime().toString());
     }
 
     /**

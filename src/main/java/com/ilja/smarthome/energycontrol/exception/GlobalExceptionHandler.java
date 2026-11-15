@@ -31,6 +31,12 @@ public class GlobalExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
     }
 
+    /** Unknown system_configuration key (the API only changes existing keys). */
+    @ExceptionHandler(ConfigurationNotFoundException.class)
+    public ProblemDetail handleConfigurationNotFound(ConfigurationNotFoundException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
+    }
+
     /** Bean Validation failure from a {@code @Validated} controller, e.g. one bad item in a list body. */
     @ExceptionHandler(ConstraintViolationException.class)
     public ProblemDetail handleConstraintViolation(ConstraintViolationException e) {

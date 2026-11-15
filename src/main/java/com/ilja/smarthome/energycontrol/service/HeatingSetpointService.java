@@ -13,6 +13,7 @@ import com.ilja.smarthome.energycontrol.repository.HeatingSetpointScheduleReposi
 import com.ilja.smarthome.energycontrol.repository.NordpoolPriceRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,17 +39,20 @@ public class HeatingSetpointService {
     private final NordpoolPriceRepository nordpoolPriceRepository;
     private final DefaultWeeklyScheduleRepository weeklyScheduleRepository;
     private final ConfigurationService configService;
+    private final ApplicationEventPublisher events;
 
     @Autowired
     public HeatingSetpointService(
             HeatingSetpointScheduleRepository scheduleRepository,
             NordpoolPriceRepository nordpoolPriceRepository,
             DefaultWeeklyScheduleRepository weeklyScheduleRepository,
-            ConfigurationService configService) {
+            ConfigurationService configService,
+            ApplicationEventPublisher events) {
         this.scheduleRepository = scheduleRepository;
         this.nordpoolPriceRepository = nordpoolPriceRepository;
         this.weeklyScheduleRepository = weeklyScheduleRepository;
         this.configService = configService;
+        this.events = events;
     }
 
     /**
@@ -96,8 +100,31 @@ public class HeatingSetpointService {
             return slotOverride.get();
         }
 
+        return templateSetpointAt(instant);
+    }
+
+    /**
+     * The weekly template's setpoint at {@code instant} (Tallinn day and time), otherwise the default.
+     * Ignores slot overrides; the price optimisation plans its changes relative to this.
+     */
+    public BigDecimal templateSetpointAt(Instant instant) {
         ZonedDateTime local = instant.atZone(EUROPE_TALLINN);
         return findSetpointForTime(templateFor(local.getDayOfWeek()), local.toLocalTime());
+    }
+
+    /**
+     * {@link #templateSetpointAt} for many instants, reading each weekday's template once
+     * (a day of 96 slots is one query instead of 96). Same order as {@code instants}.
+     */
+    public List<BigDecimal> templateSetpointsAt(List<Instant> instants) {
+        Map<DayOfWeek, List<DefaultWeeklySchedule>> templates = new java.util.EnumMap<>(DayOfWeek.class);
+        List<BigDecimal> setpoints = new ArrayList<>(instants.size());
+        for (Instant instant : instants) {
+            ZonedDateTime local = instant.atZone(EUROPE_TALLINN);
+            List<DefaultWeeklySchedule> template = templates.computeIfAbsent(local.getDayOfWeek(), this::templateFor);
+            setpoints.add(findSetpointForTime(template, local.toLocalTime()));
+        }
+        return setpoints;
     }
 
     /** Saves setpoint overrides for single price slots. */
@@ -114,6 +141,8 @@ public class HeatingSetpointService {
                     .orElse(new HeatingSetpointSchedule(price, request.getSetpoint()));
 
             schedule.setTargetSetpoint(request.getSetpoint());
+            // Set by hand: from now on the price optimisation leaves this slot alone
+            schedule.setSource(HeatingSetpointSchedule.Source.MANUAL);
             schedules.add(schedule);
         }
 
@@ -177,6 +206,8 @@ public class HeatingSetpointService {
         weeklyScheduleRepository.deleteAllInBatch();
         weeklyScheduleRepository.saveAll(entries);
         log.info("Saved weekly schedule with {} entries", entries.size());
+        // The price optimisation re-plans against the new template once this transaction has committed
+        events.publishEvent(new WeeklyScheduleChangedEvent());
     }
 
     private BigDecimal getDefaultSetpoint() {

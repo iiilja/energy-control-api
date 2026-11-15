@@ -21,6 +21,10 @@ configurations {
     }
 }
 
+// Spring Boot 3.2 ships Testcontainers 1.19.3, which cannot talk to Docker Engine 29+
+// (Docker Desktop 4.5x, current GitHub runners): it uses a Docker API version they no longer accept.
+ext['testcontainers.version'] = '1.21.4'
+
 repositories {
     mavenCentral()
 }
@@ -67,9 +71,10 @@ dependencies {
     // Testing
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
-    testImplementation 'org.testcontainers:testcontainers:1.19.3'
-    testImplementation 'org.testcontainers:postgresql:1.19.3'
-    testImplementation 'org.testcontainers:junit-jupiter:1.19.3'
+    // Repository/migration tests against a real PostgreSQL in Docker (skipped when Docker is not running)
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'org.testcontainers:junit-jupiter'
 }
 
 // Only the executable boot jar; the extra -plain.jar would also match COPY *.jar in the Dockerfiles
@@ -79,4 +84,8 @@ tasks.named('jar') {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // Same default time zone as the Docker image. With hibernate.jdbc.time_zone=UTC, Hibernate shifts
+    // LocalTime (TIME columns, e.g. the weekly template) by the JVM's offset, so on a Tallinn-time PC the
+    // PostgreSQL tests would store 00:00 as 22:00.
+    systemProperty 'user.timezone', 'UTC'
 }
